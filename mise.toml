@@ -1,0 +1,42 @@
+[tools]
+go = "1.26"
+node = "lts"
+
+[tasks.build]
+description = "Rebuild the web UI artifact, then the xfa binary (cgo must stay off)"
+depends = ["ui-build"]
+run = "go build ."
+
+[tasks.test]
+description = "Run the full test suite"
+run = "go test ./..."
+
+[tasks.lint]
+description = "gofmt + go vet"
+run = ["test -z \"$(gofmt -l .)\" || (gofmt -l . && exit 1)", "go vet ./..."]
+
+[tasks.check]
+description = "Everything CI would run"
+depends = ["lint", "test", "build"]
+
+[tasks.ui-install]
+description = "Install web UI npm deps"
+dir = "ui"
+run = "npm ci"
+
+[tasks.ui-build]
+description = "Build the single-file web UI into internal/web/static (gitignored build artifact)"
+dir = "ui"
+# depends = ["ui-install"]
+run = ["npm run build", "echo 'artifact regenerated: internal/web/static/index.html (gitignored, not committed)'"]
+
+[tasks.ui-dev]
+description = "Vite dev server; proxies /api to XFA_UI_PROXY (default http://127.0.0.1:8787)"
+dir = "ui"
+depends = ["ui-install"]
+run = "npm run dev"
+
+[tasks.ui-test]
+description = "Web UI unit tests (vitest)"
+dir = "ui"
+run = "npm test"

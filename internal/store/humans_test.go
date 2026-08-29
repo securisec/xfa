@@ -1,0 +1,84 @@
+package store
+
+import (
+	"testing"
+	"time"
+)
+
+func humanFixture(t *testing.T) (*Store, *Board, *Agent, *Agent) {
+	t.Helper()
+	s := openTemp(t)
+	b, err := s.EnsureBoard("b1", "")
+	if err != nil {
+		t.Fatalf("EnsureBoard: %v", err)
+	}
+	human, _ := s.RegisterAgent("human", "web", "")
+	agent, _ := s.RegisterAgent("claude", "sess-1", "")
+	return s, b, human, agent
+}
+
+func TestHumanHandlesFor(t *testing.T) {
+	s, _, human, agent := humanFixture(t)
+	m, err := s.HumanHandlesFor([]string{human.Handle, agent.Handle, "ghost-handle-9"})
+	if err != nil {
+		t.Fatalf("HumanHandlesFor: %v", err)
+	}
+	if !m[human.Handle] || m[agent.Handle] || m["ghost-handle-9"] {
+		t.Fatalf("wrong set: %v", m)
+	}
+	if m2, _ := s.HumanHandlesFor(nil); m2 == nil {
+		t.Fatal("empty input must return a non-nil map")
+	}
+}
+
+func TestReadBoardHuman(t *testing.T) {
+	s, b, human, agent := humanFixture(t)
+	hp, _ := s.CreatePost(b.ID, human.Handle, "from the human", "", nil)
+	_, _ = s.CreatePost(b.ID, agent.Handle, "from an agent", "", nil)
+	posts, err := s.ReadBoardHuman(b.ID, "", time.Time{}, 20)
+	if err != nil {
+		t.Fatalf("ReadBoardHuman: %v", err)
+	}
+	if len(posts) != 1 || posts[0].ID != hp.ID {
+		t.Fatalf("want only the human post, got %v", posts)
+	}
+}
+
+func TestUnaddressedHumanCount(t *testing.T) {
+	s, b, human, agent := humanFixture(t)
+	p1, _ := s.CreatePost(b.ID, human.Handle, "q one", "", nil)
+	p2, _ := s.CreatePost(b.ID, human.Handle, "q two", "", nil)
+	p3, _ := s.CreatePost(b.ID, human.Handle, "q three", "", nil)
+	if n, _ := s.UnaddressedHumanCount(b.ID); n != 3 {
+		t.Fatalf("all three unaddressed, got %d", n)
+	}
+	// A human replying to themselves does not address the parent, and the
+	// self-reply is itself a human-authored post with no non-human direct
+	// reply yet — it counts too (replies are not exempt from the spec).
+	selfReply, _ := s.CreatePost(b.ID, human.Handle, "self reply", "", &p1.ID)
+	if n, _ := s.UnaddressedHumanCount(b.ID); n != 4 {
+		t.Fatalf("self-reply adds to the count without addressing p1, got %d", n)
+	}
+	// An agent's direct reply addresses p1; the self-reply remains unaddressed.
+	_, _ = s.CreatePost(b.ID, agent.Handle, "on it", "", &p1.ID)
+	if n, _ := s.UnaddressedHumanCount(b.ID); n != 3 {
+		t.Fatalf("agent reply must address p1 only, got %d", n)
+	}
+	// Resolving addresses it (any tag state — resolved_at is the signal).
+	if err := s.Resolve(p2.ID, agent.Handle); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.UnaddressedHumanCount(b.ID); n != 2 {
+		t.Fatalf("resolved_at must address p2, got %d", n)
+	}
+	// Tombstoned human posts drop out entirely; the self-reply remains.
+	_ = s.Tombstone(p3.ID, human.Handle)
+	if n, _ := s.UnaddressedHumanCount(b.ID); n != 1 {
+		t.Fatalf("tombstone must remove p3 leaving only the self-reply, got %d", n)
+	}
+	// An agent directly replying to the self-reply finally addresses it.
+	_, _ = s.CreatePost(b.ID, agent.Handle, "got the self-reply too", "", &selfReply.ID)
+	if n, _ := s.UnaddressedHumanCount(b.ID); n != 0 {
+		t.Fatalf("agent reply must address the self-reply, got %d", n)
+	}
+}

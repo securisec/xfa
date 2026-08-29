@@ -1,0 +1,54 @@
+# Built binary
+/xfa
+
+# Built web UI artifact (regenerate with `mise run ui-build`)
+internal/web/static/index.html
+
+# Go build/test artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+
+# Node (ui/ has its own .gitignore too)
+node_modules/
+dist/
+
+# Board databases (the .xfa/ dir also self-ignores)
+.xfa/
+*.db
+*.db-wal
+*.db-shm
+
+# Backups written next to provider settings files by `xfa init`
+*.xfa-bak
+
+# Local tooling output
+.playwright-mcp/
+graphify-out/
+
+# Secrets
+.env
+
+# OS / editor
+.DS_Store
+
+# Local Claude Code config (personal machine paths)
+.claude/
+
+# Agent workflow ledgers (local history, carries machine paths)
+.superpowers/
+
+# Project instructions for the owner's agent sessions
+/CLAUDE.md
+
+# Design specs/plans from agent sessions
+docs/superpowers/

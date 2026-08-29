@@ -1,0 +1,378 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  include: button, modal, input, select, textarea, toast;
+}
+/* Catppuccin Mocha — the darkest of the four flavors. Page ground is crust
+   (#11111b), the darkest base; mantle and base layer up from there. Palette:
+   https://catppuccin.com/palette/ */
+@plugin "daisyui/theme" {
+  name: "mocha";
+  default: true;
+  color-scheme: dark;
+  --color-base-100: #1e1e2e;            /* base  — raised: inputs, modal, hover */
+  --color-base-200: #181825;            /* mantle — cards, top bar */
+  --color-base-300: #11111b;            /* crust — page ground (darkest) */
+  --color-base-content: #cdd6f4;        /* text */
+  --color-primary: #cba6f7;             /* mauve — all interactive chrome */
+  --color-primary-content: #11111b;
+  --color-secondary: #89b4fa;           /* blue */
+  --color-secondary-content: #11111b;
+  --color-accent: #f5c2e7;              /* pink */
+  --color-accent-content: #11111b;
+  --color-neutral: #313244;             /* surface0 */
+  --color-neutral-content: #cdd6f4;
+  --color-info: #89dceb;                /* sky */
+  --color-info-content: #11111b;
+  --color-success: #a6e3a1;             /* green */
+  --color-success-content: #11111b;
+  --color-warning: #f9e2af;             /* yellow */
+  --color-warning-content: #11111b;
+  --color-error: #f38ba8;               /* red */
+  --color-error-content: #11111b;
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+/* Only the latin woff2 of each face: fontsource's per-weight CSS ships every
+   script subset plus a legacy woff fallback, which was ~1.4 MB of the embed. */
+@font-face { font-family: "Roboto"; font-weight: 400; font-display: swap; src: url("@fontsource/roboto/files/roboto-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Roboto"; font-weight: 500; font-display: swap; src: url("@fontsource/roboto/files/roboto-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Roboto"; font-weight: 700; font-display: swap; src: url("@fontsource/roboto/files/roboto-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Roboto Mono"; font-weight: 400; font-display: swap; src: url("@fontsource/roboto-mono/files/roboto-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Roboto Mono"; font-weight: 500; font-display: swap; src: url("@fontsource/roboto-mono/files/roboto-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Roboto Mono"; font-weight: 700; font-display: swap; src: url("@fontsource/roboto-mono/files/roboto-mono-latin-700-normal.woff2") format("woff2"); }
+
+/* ── terminal-native dark board ──────────────────────────────────────
+   The posters here are agents that live in terminals; the human peeks
+   in. Colors are xterm-derived and identities are monospace. Borders,
+   never shadows, do the separation. */
+:root {
+  /* All chrome derives from the active daisyUI theme (mocha, ui/index.html);
+     base-100 is the lightest base in a dark theme, so it is the raised layer. */
+  --bg:      var(--color-base-300);   /* page ground */
+  --surface: var(--color-base-200);   /* cards, top bar */
+  --raised:  var(--color-base-100);   /* inputs, modal, hover */
+  --border:  color-mix(in oklab, var(--color-base-content) 14%, transparent);
+  --text:    var(--color-base-content);
+  --muted:   color-mix(in oklab, var(--color-base-content) 58%, transparent);
+  --accent:  var(--color-primary);    /* all interactive chrome */
+  --err:     var(--color-error);
+  --ok:      var(--color-success);
+
+  /* Catppuccin Mocha accents — the single source for the per-handle and
+     per-tag palettes JS assigns in lib/format.js. Kept here so every color in
+     the UI comes from one flavor. */
+  --ctp-blue:     #89b4fa;
+  --ctp-peach:    #fab387;
+  --ctp-green:    #a6e3a1;
+  --ctp-teal:     #94e2d5;
+  --ctp-pink:     #f5c2e7;
+  --ctp-sky:      #89dceb;
+  --ctp-maroon:   #eba0ac;
+  --ctp-lavender: #b4befe;
+  --ctp-yellow:   #f9e2af;
+  --ctp-mauve:    #cba6f7;
+  --ctp-overlay1: #7f849c;
+  --mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.mono { font-family: var(--mono); }
+
+/* List views show a preview, not the whole post: three lines, then ellipsis.
+   The full body is only ever rendered in the thread detail view. */
+.clamp3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Post bodies are paragraphs, not headlines. */
+.post-body { color: var(--text); font-size: 0.925rem; line-height: 1.65; }
+.post-body-sm { color: var(--text); font-size: 0.9rem; line-height: 1.6; }
+.tomb { color: var(--muted); font-style: italic; }
+
+/* Thread-view bodies past BODY_CLIP runes are cut and hidden behind this
+   chevron toggle. It is a real <button> so it is keyboard-reachable; the
+   global :focus-visible rule below gives it the same accent ring as
+   everything else, so nothing extra is needed here. The negative margin
+   pulls the padded hit target back flush with the body text above it. */
+.expander {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  margin: 0.3rem 0 0 -6px;
+  cursor: pointer;
+}
+.expander:hover { text-decoration: underline; }
+
+.surface { background: var(--surface); }
+.xcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  transition: background-color 120ms ease;
+}
+.xcard-hover:hover { background: var(--raised); }
+/* The signature: a 3px rail in the author's color down the card's left edge.
+   Colour comes from an inline style so it can be per-post. */
+.rail { border-left-width: 3px; border-left-style: solid; }
+.rail-sm { border-left-width: 2px; border-left-style: solid; }
+/* Reply indent guide: quiet, so the author rail stays the loud thing. */
+.indent { border-left: 1px solid var(--border); }
+
+.handle { font-family: var(--mono); font-weight: 500; }
+.meta { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+
+.wordmark {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+.navlink {
+  font-family: var(--mono);
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 0.375rem;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.navlink:hover { color: var(--text); }
+.navlink.is-active { color: var(--accent); background: color-mix(in oklab, var(--accent) 14%, transparent); }
+
+/* Toolbar chrome: dark pills. */
+.xpill {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.xfield {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+/* .xpill sets the default text color, so an accented pill (the view switcher)
+   needs the higher-specificity rule to win it back. */
+.xpill.accent { color: var(--accent); }
+.xfield::placeholder { color: var(--muted); }
+.xfield:focus, .xpill:focus { outline: none; box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 30%, transparent); }
+
+/* Tag badges keep the TUI's [tag] vernacular: mono text in the tag color on
+   a pill tinted with the same color at ~15% alpha (set inline). */
+.tagpill {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 1px 6px;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+/* Reply-count badge. The number is the indicator, so it carries the weight:
+   mono + semibold in a rounded pill. Quiet by default (a zero-reply thread
+   should recede); .xreplies-hot lights it in the accent so live threads pop
+   off the card at a glance. */
+.xreplies {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  background: var(--raised);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.xreplies-hot {
+  background: color-mix(in oklab, var(--accent) 19%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.xreplies .xreplies-glyph { font-size: 10px; opacity: 0.65; }
+
+/* Session badge: which agent session a post came out of. Deliberately
+   quieter than the tag pill — the author rail and handle are the loud
+   identity, the session is context. A session name can be 60 runes and a
+   card cannot, so it truncates rather than wraps. .sesspill-on lights the
+   badge when it names the session currently being filtered on, so it is
+   obvious why a card is in the list. */
+.sesspill {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 15rem;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 1px 6px;
+  border-radius: 0.25rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sesspill-on { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+
+/* Human badge: this board is agent-first, so a human-authored post is the
+   exception worth flagging. Amber — not used by any handle, tag, or session
+   color above, so it reads as its own thing next to the periwinkle session
+   pill and the per-tag palette. */
+.humanpill { color: var(--color-warning); background: color-mix(in oklab, var(--color-warning) 15%, transparent); }
+
+/* Stat cells: borders, not gaps, do the separating here too. */
+.statcell + .statcell { border-left: 1px solid var(--border); }
+@media (max-width: 639px) { .statcell:nth-child(odd) { border-left: none; } }
+
+.xbtn-accent {
+  background: var(--accent);
+  color: var(--color-primary-content);
+  border: none;
+  font-weight: 500;
+  transition: filter 120ms ease;
+}
+.xbtn-accent:hover { filter: brightness(1.1); }
+.xbtn-quiet {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.xbtn-quiet:hover { color: var(--text); border-color: var(--accent); }
+.xbtn-danger {
+  background: transparent;
+  border: 1px solid var(--err);
+  color: var(--err);
+}
+/* Icon-only resolve/delete affordances: quiet by default, lit in their own
+   color on hover, but no border/background/text to dominate a row. */
+.xbtn-icon-ok, .xbtn-icon-danger {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  opacity: 0.75;
+  padding: 0.25rem;
+  line-height: 0;
+  transition: color 120ms ease, opacity 120ms ease;
+}
+.xbtn-icon-ok:hover { color: var(--ok); opacity: 1; }
+.xbtn-icon-danger:hover { color: var(--err); opacity: 1; }
+
+/* Mention/ref picker (@handles, #post ids). Anchored to the composer's wrapper (position:relative),
+   flush under the textarea, and deliberately quiet: it is a spelling aid, so
+   it borrows the input surface rather than announcing itself as a new plane.
+   The active row is the only lit thing, in the same accent wash the nav and
+   session pills use. */
+.acmenu {
+  position: absolute;
+  z-index: 40;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 4px;
+}
+.acrow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 3px 8px;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+.acrow-on { background: color-mix(in oklab, var(--accent) 18%, transparent); }
+.acrow-label { font-size: 12.5px; color: var(--text); white-space: nowrap; }
+.acrow-on .acrow-label { color: var(--accent); }
+/* The detail is context, never the thing being picked: it yields all the
+   width and truncates rather than wrapping, so one row stays one line. */
+.acrow-detail { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* daisyUI's .modal-box is a scroll container (overflow-y:auto), which would
+   clip a menu hanging below the textarea instead of letting it overlap the
+   chrome underneath. Lifted only while the menu is open, so the box keeps its
+   normal scrolling behaviour the rest of the time. Unlayered, so it beats the
+   layered component rule it is overriding.
+
+   The bound this trades against: while the menu is open the modal box cannot
+   scroll, so on a viewport short enough to push the composer past max-height
+   the overflow spills instead of scrolling. Acceptable, because it lasts only
+   as long as the menu does and the menu is dismissed by Escape, by a pick, or
+   by clicking away — none of which need the box to scroll. Anchoring the menu
+   to the viewport (fixed positioning + measured coordinates) is the fix if
+   that box ever grows real scrollable content. */
+.acmenu-open { overflow: visible; }
+
+/* Keyboard focus must be visible on every interactive element. */
+a:focus-visible, button:focus-visible, select:focus-visible,
+input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.xtoast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.875rem;
+}
+.xtoast-err { border-color: var(--err); color: var(--err); }
+.xtoast-ok  { border-color: var(--ok);  color: var(--ok); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* Rendered markdown inside post bodies: paragraph-scale, terminal-quiet.
+   h1/h2 never reach the DOM (renderer + sanitizer demote them). */
+.post-body :is(p, ul, ol, blockquote, pre, table),
+.post-body-sm :is(p, ul, ol, blockquote, pre, table) { margin: 0.35rem 0; }
+.post-body :is(h3, h4, h5, h6),
+.post-body-sm :is(h3, h4, h5, h6) { font-weight: 700; font-size: 0.95rem; margin: 0.5rem 0 0.2rem; }
+.post-body ul,
+.post-body-sm ul { list-style: disc; padding-left: 1.25rem; }
+.post-body ol,
+.post-body-sm ol { list-style: decimal; padding-left: 1.25rem; }
+.post-body code,
+.post-body-sm code { font-family: var(--mono); font-size: 0.85em; background: var(--raised); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.post-body pre,
+.post-body-sm pre { background: var(--raised); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.7rem; overflow-x: auto; }
+.post-body pre code,
+.post-body-sm pre code { background: none; border: none; padding: 0; }
+.post-body blockquote,
+.post-body-sm blockquote { border-left: 2px solid var(--border); padding-left: 0.7rem; color: var(--muted); }
+.post-body a,
+.post-body-sm a { color: var(--accent); text-decoration: underline; }
+.post-body table,
+.post-body-sm table { font-size: 0.85rem; border-collapse: collapse; }
+.post-body :is(th, td),
+.post-body-sm :is(th, td) { border: 1px solid var(--border); padding: 2px 8px; }
+/* Preview cards clamp to 3 lines: kill block rhythm so density survives. */
+.clamp3 :is(p, ul, ol, blockquote, pre, table, h3, h4, h5, h6) { margin: 0; display: inline; }
+/* display:none would drop the <br> entirely — marked's breaks:true emits it
+   with no surrounding whitespace, so "line one\nline two" would render as
+   "line oneline two". Keep it as a zero-height inline gap instead. */
+.clamp3 br { display: inline-block; width: 0.3em; height: 0; overflow: hidden; }
+.clamp3 :is(li)::after { content: ' '; }
