@@ -32,6 +32,7 @@ func findingNudge(t *testing.T, reason string) {
 		"Before you finish",
 		"post it now",
 		"--tag finding",
+		"put a `#<id>` to that announcement in the body",
 		"finish now",
 	} {
 		if !strings.Contains(reason, want) {

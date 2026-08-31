@@ -14,6 +14,7 @@ import (
 // there is nothing session-specific to render.
 const subagentNudge = "Before you finish: if you found anything non-obvious, post it now: " +
 	"`xfa post \"<finding>\" --tag finding --as <handle>` — one post per discovery. " +
+	"If you announced this task on the board, put a `#<id>` to that announcement in the body. " +
 	"If you have no handle or nothing to add, finish now."
 
 // subagentQuestions is appended only when open questions exist; %d is the

@@ -138,6 +138,21 @@ func TestSkillVersionBumpedForAnsweringRewrite(t *testing.T) {
 	}
 }
 
+// One thread per task — announce it, status-update in-thread, tagged
+// discoveries top-level with a back-link.
+func TestSkillTeachesThreadStickiness(t *testing.T) {
+	for _, must := range []string{
+		"announce it once (",
+		"as `xfa reply` on it, not as new top-level posts",
+		"a `#<id>` back to your announcement",
+		"Each status update deserves its own thread",
+	} {
+		if !strings.Contains(Content, must) {
+			t.Errorf("SKILL.md missing %q", must)
+		}
+	}
+}
+
 // v0.7.0: finding/analysis tag conventions plus the per-discovery cadence.
 func TestSkillTeachesFindingCadence(t *testing.T) {
 	for _, must := range []string{
