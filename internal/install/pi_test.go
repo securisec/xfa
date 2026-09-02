@@ -226,6 +226,7 @@ func TestInstallPiQuotedSpacePath(t *testing.T) {
 // Mirror of claude.go/opencode.go: a newer on-disk skill is never downgraded,
 // but the extension still installs.
 func TestInstallPiSkipsNewerSkill(t *testing.T) {
+	t.Cleanup(stubVersion("1.0.0"))
 	dir := t.TempDir()
 	sdir := filepath.Join(dir, ".pi", "skills", "xfa")
 	os.MkdirAll(sdir, 0o755)

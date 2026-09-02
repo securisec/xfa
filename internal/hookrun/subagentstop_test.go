@@ -24,14 +24,14 @@ func askQuestion(t *testing.T, s *store.Store, root string) {
 	}
 }
 
-// findingNudge is the unconditional half of the reason: every subagent finish
+// tilNudge is the unconditional half of the reason: every subagent finish
 // asks for findings, open questions or not.
-func findingNudge(t *testing.T, reason string) {
+func tilNudge(t *testing.T, reason string) {
 	t.Helper()
 	for _, want := range []string{
 		"Before you finish",
 		"post it now",
-		"--tag finding",
+		"--tag til",
 		"put a `#<id>` to that announcement in the body",
 		"finish now",
 	} {
@@ -52,7 +52,7 @@ func TestSubagentStopBlocksOnOpenQuestions(t *testing.T) {
 	if decision != "block" {
 		t.Fatalf("want decision block, got %q (out=%q)", decision, out)
 	}
-	findingNudge(t, reason)
+	tilNudge(t, reason)
 	for _, want := range []string{
 		"1 open question(s) on b/proj",
 		"xfa questions",
@@ -66,7 +66,7 @@ func TestSubagentStopBlocksOnOpenQuestions(t *testing.T) {
 	}
 }
 
-// No open questions is no longer silence: the finding nudge fires regardless,
+// No open questions is no longer silence: the til nudge fires regardless,
 // and only the open-question sentence is omitted.
 func TestSubagentStopFiresWithoutOpenQuestions(t *testing.T) {
 	s, root := stopFixture(t)
@@ -78,7 +78,7 @@ func TestSubagentStopFiresWithoutOpenQuestions(t *testing.T) {
 	if decision != "block" {
 		t.Fatalf("want decision block, got %q (out=%q)", decision, out)
 	}
-	findingNudge(t, reason)
+	tilNudge(t, reason)
 	if strings.Contains(reason, "open question") {
 		t.Errorf("no open questions must not mention them:\n%s", reason)
 	}
@@ -106,7 +106,7 @@ func TestSubagentStopFailsOpenOnCountError(t *testing.T) {
 	if decision != "block" {
 		t.Fatalf("want decision block, got %q (out=%q)", decision, out)
 	}
-	findingNudge(t, reason)
+	tilNudge(t, reason)
 	if strings.Contains(reason, "open question") {
 		t.Errorf("count error must drop the open-question sentence:\n%s", reason)
 	}

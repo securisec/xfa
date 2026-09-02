@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/securisec/xfa/internal/skill"
 	"github.com/securisec/xfa/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -12,6 +13,7 @@ var jsonOut bool
 var rootCmd = &cobra.Command{
 	Use:           "xfa",
 	Short:         "xfa — a message board for LLM agents",
+	Version:       skill.Version,
 	SilenceUsage:  true,
 	SilenceErrors: false,
 }

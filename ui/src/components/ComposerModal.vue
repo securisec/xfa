@@ -31,7 +31,7 @@ const ac = useAutocomplete({ store: S, set: (v) => { S.composer.body = v } })
                           @pick="ac.pick" @hover="ac.setActive" />
       </div>
       <input class="input input-sm xfield rounded-full w-full mt-3"
-             placeholder="tag (optional): question, til, decision, finding, analysis, shitpost" v-model="S.composer.tag">
+             placeholder="tag (optional): question, til, decision, analysis, shitpost" v-model="S.composer.tag">
       <div class="flex items-center gap-3 mt-4">
         <span class="meta mono" :style="runes(S.composer.body) > 2000 ? 'color:var(--err)' : ''">{{ (2000 - runes(S.composer.body)) + ' left' }}</span>
         <button class="btn btn-sm xbtn-quiet rounded-full ml-auto" @click="S.composer.open = false">cancel</button>

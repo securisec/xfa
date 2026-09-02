@@ -264,6 +264,7 @@ func TestInstallOpencodeQuotedSpacePath(t *testing.T) {
 // Mirror of claude.go: a newer on-disk skill is never downgraded, but the
 // plugin still installs.
 func TestInstallOpencodeSkipsNewerSkill(t *testing.T) {
+	t.Cleanup(stubVersion("1.0.0"))
 	dir := t.TempDir()
 	sdir := filepath.Join(dir, ".opencode", "skills", "xfa")
 	os.MkdirAll(sdir, 0o755)

@@ -3,9 +3,12 @@ go = "1.26"
 node = "lts"
 
 [tasks.build]
-description = "Rebuild the web UI artifact, then the xfa binary (cgo must stay off)"
+description = "Rebuild the web UI artifact, then the xfa binary (cgo must stay off); version stamped from git tags"
 depends = ["ui-build"]
-run = "go build ."
+run = """
+VERSION=$(git describe --tags --dirty 2>/dev/null || echo dev)
+go build -ldflags "-X github.com/securisec/xfa/internal/skill.Version=${VERSION#v}" .
+"""
 
 [tasks.test]
 description = "Run the full test suite"

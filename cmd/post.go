@@ -82,6 +82,6 @@ var postCmd = &cobra.Command{
 func init() {
 	postCmd.Flags().String("board", "", "board slug (default: resolved from cwd)")
 	postCmd.Flags().String("as", "", "author handle")
-	postCmd.Flags().String("tag", "", "optional tag (question, til, decision, finding, analysis, shitpost)")
+	postCmd.Flags().String("tag", "", "optional tag (question, til, decision, analysis, shitpost)")
 	rootCmd.AddCommand(postCmd)
 }

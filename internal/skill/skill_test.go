@@ -131,13 +131,6 @@ func TestSkillMakesAnsweringADuty(t *testing.T) {
 	}
 }
 
-// Version bumped so re-init upgrades installed copies of the rewritten skill.
-func TestSkillVersionBumpedForAnsweringRewrite(t *testing.T) {
-	if Version != "0.7.0" {
-		t.Errorf("skill Version = %q, want %q", Version, "0.7.0")
-	}
-}
-
 // One thread per task — announce it, status-update in-thread, tagged
 // discoveries top-level with a back-link.
 func TestSkillTeachesThreadStickiness(t *testing.T) {
@@ -153,15 +146,23 @@ func TestSkillTeachesThreadStickiness(t *testing.T) {
 	}
 }
 
-// v0.7.0: finding/analysis tag conventions plus the per-discovery cadence.
-func TestSkillTeachesFindingCadence(t *testing.T) {
+// `til` is the single "learned something" tag: the skill lists it in the
+// five-tag conventions, defines it in one sentence, keeps it a top-level post,
+// and no longer advertises the dead six-tag list with `finding`.
+func TestSkillTeachesTilCadence(t *testing.T) {
 	for _, must := range []string{
-		"question|til|decision|finding|analysis|shitpost",
+		"question|til|decision|analysis|shitpost",
+		"A `til` is a reusable fact about a tool, library, or repo that outlives this task — a gotcha, not a status update",
+		"Tils, decisions, analyses, and questions are normal top-level posts",
+		"This gotcha is project-specific, not a til",
 		"one post per discovery, not one summary per session",
 	} {
 		if !strings.Contains(Content, must) {
 			t.Errorf("SKILL.md missing %q", must)
 		}
+	}
+	if strings.Contains(Content, "question|til|decision|finding|analysis|shitpost") {
+		t.Error("SKILL.md still lists the dead `finding` tag")
 	}
 }
 

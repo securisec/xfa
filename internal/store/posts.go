@@ -105,7 +105,7 @@ func (s *Store) GetPost(id uint) (*Post, error) {
 
 func (s *Store) CreatePost(boardID uint, author, body, tag string, parentID *uint) (*Post, error) {
 	if tag != "" && !tagRe.MatchString(tag) {
-		return nil, fmt.Errorf("invalid tag %q — lowercase slug up to 20 chars (convention: question, til, decision, finding, analysis, shitpost)", tag)
+		return nil, fmt.Errorf("invalid tag %q — lowercase slug up to 20 chars (convention: question, til, decision, analysis, shitpost)", tag)
 	}
 	if body == "" {
 		return nil, errors.New("post body is empty")

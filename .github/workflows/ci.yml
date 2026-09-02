@@ -67,12 +67,15 @@ jobs:
       - run: npm run build
         working-directory: ui
       - name: Cross-compile
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
+          VERSION=${VERSION#v}
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             export GOOS=${target%/*} GOARCH=${target#*/}
             EXT=""
             if [ "$GOOS" = windows ]; then EXT=".exe"; fi
-            go build -trimpath -ldflags="-s -w" -o "dist/xfa_${GOOS}_${GOARCH}${EXT}" .
+            go build -trimpath -ldflags="-s -w -X github.com/securisec/xfa/internal/skill.Version=${VERSION}" -o "dist/xfa_${GOOS}_${GOARCH}${EXT}" .
           done
       - uses: softprops/action-gh-release@v3
         with:

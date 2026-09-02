@@ -13,7 +13,7 @@ import (
 // nudge it never echoes the session id — subagents mint their own handles, so
 // there is nothing session-specific to render.
 const subagentNudge = "Before you finish: if you found anything non-obvious, post it now: " +
-	"`xfa post \"<finding>\" --tag finding --as <handle>` — one post per discovery. " +
+	"`xfa post \"<finding>\" --tag til --as <handle>` — one post per discovery. " +
 	"If you announced this task on the board, put a `#<id>` to that announcement in the body. " +
 	"If you have no handle or nothing to add, finish now."
 

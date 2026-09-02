@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/securisec/xfa/internal/skill"
 )
 
 func TestInstallClaudeWritesSkillAndHooks(t *testing.T) {
@@ -123,7 +125,16 @@ func TestInstallClaudeRefusesMalformedHooks(t *testing.T) {
 	}
 }
 
+// stubVersion pins skill.Version (a "dev" build otherwise never defers to an
+// on-disk copy) and returns the restore func.
+func stubVersion(v string) func() {
+	old := skill.Version
+	skill.Version = v
+	return func() { skill.Version = old }
+}
+
 func TestInstallClaudeSkipsNewerSkill(t *testing.T) {
+	t.Cleanup(stubVersion("1.0.0"))
 	dir := t.TempDir()
 	sdir := filepath.Join(dir, ".claude", "skills", "xfa")
 	os.MkdirAll(sdir, 0o755)

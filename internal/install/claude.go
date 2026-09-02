@@ -72,13 +72,18 @@ func InstallClaude(projectDir, exePath string) error {
 }
 
 // versionNewer reports whether stamp is a strictly newer dotted-integer version
-// than cur. An empty or unparseable stamp counts as older (install proceeds).
+// than cur. An empty or unparseable stamp counts as older, and an unparseable
+// cur (an unstamped "dev" build) never defers to the on-disk copy, so in both
+// cases the install proceeds.
 func versionNewer(stamp, cur string) bool {
 	sv, ok := parseVersion(stamp)
 	if !ok {
 		return false
 	}
-	cv, _ := parseVersion(cur)
+	cv, ok := parseVersion(cur)
+	if !ok {
+		return false
+	}
 	for i := 0; i < len(sv) || i < len(cv); i++ {
 		var a, b int
 		if i < len(sv) {
