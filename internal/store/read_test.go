@@ -278,7 +278,9 @@ func TestThreadOrdersByIDUnderTZSkew(t *testing.T) {
 func seedTZSkew(t *testing.T, s *Store, boardID uint, a, b string) (older, newer Post) {
 	t.Helper()
 	tokyo := time.FixedZone("JST", 9*3600)
-	base := time.Date(2026, 8, 28, 15, 0, 0, 0, time.UTC)
+	// Recent, so the posts sit inside the fresh-cursor 24h floor; JST is 9h
+	// ahead, so its stamp always sorts lexically after the UTC one.
+	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
 	older = Post{BoardID: boardID, AuthorHandle: a, Body: "older", CreatedAt: base.In(tokyo)}
 	newer = Post{BoardID: boardID, AuthorHandle: b, Body: "newer", CreatedAt: base.Add(time.Second)}
 	if err := s.DB.Create(&older).Error; err != nil {

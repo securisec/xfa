@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/securisec/xfa/internal/install"
 	"github.com/securisec/xfa/internal/store"
 	"github.com/spf13/pflag"
 )
@@ -15,18 +14,24 @@ import (
 // resetProviderFlags restores the --provider StringSlice flags to their
 // defaults. Cobra keeps flag state across Execute calls in-process, and a
 // StringSlice APPENDS on every later explicit set, so without this a value
-// from one test (e.g. "bogus") leaks into the next.
+// from one test (e.g. "bogus") leaks into the next. The append switch is a
+// private bit inside the Value that Replace() does not clear, so the Value is
+// swapped for a brand-new one rather than mutated.
 func resetProviderFlags(t *testing.T) {
 	t.Helper()
 	reset := func(fs *pflag.FlagSet, def []string) {
 		f := fs.Lookup("provider")
-		if err := f.Value.(pflag.SliceValue).Replace(def); err != nil {
-			t.Fatalf("reset provider flag: %v", err)
-		}
+		fresh := pflag.NewFlagSet("", pflag.ContinueOnError)
+		fresh.StringSlice("provider", def, "")
+		f.Value = fresh.Lookup("provider").Value
+		f.Changed = false
+	}
+	if f := uninstallCmd.Flags().Lookup("all"); f != nil {
+		_ = f.Value.Set("false")
 		f.Changed = false
 	}
 	reset(initCmd.Flags(), []string{"claude"})
-	reset(uninstallCmd.Flags(), install.Names())
+	reset(uninstallCmd.Flags(), []string{"claude"})
 }
 
 // markerProject prepares a temp project dir as cwd with XFA_DB unset (empty
@@ -282,16 +287,43 @@ func TestUninstallUnknownProviderRejected(t *testing.T) {
 	if strings.Contains(out, "removed provider") {
 		t.Fatalf("validation must happen before any provider runs, got output %q", out)
 	}
+	// Same with a valid name alongside the bogus one: nothing runs at all.
+	project, _ := markerProject(t)
+	runXfa(t, "init", "--board", "bogustest", "--db", filepath.Join(t.TempDir(), "custom.db"), "--provider", "claude")
+	if _, err := runXfaErr(t, "uninstall", "--provider", "claude,bogus"); err == nil {
+		t.Fatal("unknown provider must be rejected even next to a valid one")
+	}
+	for _, p := range []string{filepath.Join(project, ".claude", "skills", "xfa", "SKILL.md"), filepath.Join(project, store.MarkerName)} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("rejected uninstall must remove nothing, %s: %v", p, err)
+		}
+	}
 }
 
-// uninstall removes the marker from cwd (keeping the DB file), and is quiet
-// about an absent marker.
+// `--provider ""` parses to an empty slice; it must be an error, not a silent
+// no-op that exits 0.
+func TestUninstallEmptyProviderRejected(t *testing.T) {
+	project, _ := markerProject(t)
+	runXfa(t, "init", "--board", "emptytest", "--db", filepath.Join(t.TempDir(), "custom.db"), "--provider", "claude")
+	out, err := runXfaErr(t, "uninstall", "--provider", "")
+	if err == nil || !strings.Contains(err.Error(), "no provider given") {
+		t.Fatalf("empty --provider must be rejected, got err=%v out=%q", err, out)
+	}
+	for _, p := range []string{filepath.Join(project, ".claude", "skills", "xfa", "SKILL.md"), filepath.Join(project, store.MarkerName)} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("rejected uninstall must remove nothing, %s: %v", p, err)
+		}
+	}
+}
+
+// uninstall --all removes the marker from cwd (keeping the DB file), and is
+// quiet about an absent marker.
 func TestUninstallRemovesMarker(t *testing.T) {
 	project, _ := markerProject(t)
 	dbPath := filepath.Join(t.TempDir(), "custom.db")
 	runXfa(t, "init", "--board", "markertest", "--db", dbPath, "--provider", "claude")
 
-	out := runXfa(t, "uninstall", "--provider", "claude,opencode")
+	out := runXfa(t, "uninstall", "--all")
 	if !strings.Contains(out, store.MarkerName) {
 		t.Fatalf("uninstall must report the removed marker, got %q", out)
 	}
@@ -303,7 +335,7 @@ func TestUninstallRemovesMarker(t *testing.T) {
 	}
 
 	// Second run: no marker left — no removal line, no error.
-	out = runXfa(t, "uninstall", "--provider", "claude,opencode")
+	out = runXfa(t, "uninstall", "--all")
 	if strings.Contains(out, store.MarkerName) {
 		t.Fatalf("no marker to remove, but got %q", out)
 	}

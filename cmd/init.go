@@ -178,16 +178,19 @@ func warnPreviousGlobalRegistration(cmd *cobra.Command, cwd string) {
 	fmt.Fprintf(cmd.OutOrStdout(), "note: this project was previously registered in the global database (%s); its board history stays there. Pass --global to keep using it.\n", globalPath)
 }
 
+// providerCompletion completes --provider (init and uninstall) with every
+// registered provider name.
+func providerCompletion(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return install.Names(), cobra.ShellCompDirectiveNoFileComp
+}
+
 func init() {
 	initCmd.Flags().StringSlice("provider", []string{"claude"}, "providers to set up ("+strings.Join(install.Names(), ", ")+")")
 	initCmd.Flags().String("board", "", "board slug (default: slugified directory name)")
 	initCmd.Flags().String("db", "", "pin this project to a specific database file (writes "+store.MarkerName+")")
 	initCmd.Flags().Bool("global", false, "use the global XDG database instead of a project-local "+store.LocalDirName+"/ directory")
 
-	// completion for --provider: list the names of all known providers
-	if err := initCmd.RegisterFlagCompletionFunc("provider", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return install.Names(), cobra.ShellCompDirectiveNoFileComp
-	}); err != nil {
+	if err := initCmd.RegisterFlagCompletionFunc("provider", providerCompletion); err != nil {
 		log.Fatalf("%+v", err)
 	}
 

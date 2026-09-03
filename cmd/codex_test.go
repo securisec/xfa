@@ -3,10 +3,13 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/securisec/xfa/internal/install"
+	"github.com/securisec/xfa/internal/store"
+	"github.com/spf13/cobra"
 )
 
 // `xfa init --provider codex` installs the codex skill + hooks through the
@@ -57,28 +60,110 @@ func TestInitAndUninstallProviderCodex(t *testing.T) {
 	}
 }
 
-// A bare `xfa uninstall` defaults to every registered provider — the list is
-// install.Names(), so a newly registered provider can never be orphaned by a
-// stale hardcoded default.
-func TestUninstallDefaultCoversEveryProvider(t *testing.T) {
+// A bare `xfa uninstall` mirrors init: it removes claude only, leaving other
+// installed providers and the .xfa.json marker alone (a partial uninstall must
+// not unpin the DB for providers still installed).
+func TestUninstallDefaultsToClaude(t *testing.T) {
 	project, _ := markerProject(t)
 	dbPath := filepath.Join(t.TempDir(), "custom.db")
-	runXfa(t, "init", "--board", "defaulttest", "--db", dbPath, "--provider", "codex")
+	runXfa(t, "init", "--board", "defaulttest", "--db", dbPath, "--provider", "claude,codex")
 
-	// The flag's registered default is the registry list.
-	def := uninstallCmd.Flags().Lookup("provider").DefValue
-	for _, name := range install.Names() {
-		if !strings.Contains(def, name) {
-			t.Fatalf("uninstall --provider default %q must include %q", def, name)
-		}
+	if def := uninstallCmd.Flags().Lookup("provider").DefValue; def != "[claude]" {
+		t.Fatalf("uninstall --provider default = %q, want [claude]", def)
 	}
 	out := runXfa(t, "uninstall")
-	for _, name := range install.Names() {
-		if !strings.Contains(out, "removed provider: "+name) {
-			t.Errorf("bare uninstall must run provider %q, output:\n%s", name, out)
+	if out != "removed provider: claude\n" {
+		t.Fatalf("bare uninstall output = %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".claude", "skills", "xfa")); !os.IsNotExist(err) {
+		t.Fatalf("bare uninstall must remove claude artifacts, stat err = %v", err)
+	}
+	for _, p := range []string{
+		filepath.Join(project, ".agents", "skills", "xfa", "SKILL.md"),
+		filepath.Join(project, store.MarkerName),
+	} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("bare uninstall must leave %s: %v", p, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(project, ".agents")); !os.IsNotExist(err) {
-		t.Fatalf("bare uninstall must clean codex artifacts, stat err = %v", err)
+}
+
+// `--all` removes every registered provider and drops the marker.
+func TestUninstallAll(t *testing.T) {
+	project, _ := markerProject(t)
+	dbPath := filepath.Join(t.TempDir(), "custom.db")
+	runXfa(t, "init", "--board", "alltest", "--db", dbPath, "--provider", "claude,codex")
+
+	out := runXfa(t, "uninstall", "--all")
+	for _, name := range install.Names() {
+		if strings.Count(out, "removed provider: "+name+"\n") != 1 {
+			t.Errorf("--all must run provider %q exactly once, output:\n%s", name, out)
+		}
+	}
+	for _, p := range []string{
+		filepath.Join(project, ".claude", "skills", "xfa"),
+		filepath.Join(project, ".agents"),
+		filepath.Join(project, store.MarkerName),
+	} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("--all must remove %s, stat err = %v", p, err)
+		}
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("uninstall must keep the DB file: %v", err)
+	}
+}
+
+// Naming every provider by hand removes them all but is NOT --all: the marker
+// stays, since only --all means "unpin this project".
+func TestUninstallEveryNameKeepsMarker(t *testing.T) {
+	project, _ := markerProject(t)
+	runXfa(t, "init", "--board", "namestest", "--db", filepath.Join(t.TempDir(), "custom.db"), "--provider", "claude,codex")
+
+	out := runXfa(t, "uninstall", "--provider", strings.Join(install.Names(), ","))
+	for _, name := range install.Names() {
+		if !strings.Contains(out, "removed provider: "+name+"\n") {
+			t.Errorf("must run provider %q, output:\n%s", name, out)
+		}
+	}
+	if strings.Contains(out, store.MarkerName) {
+		t.Errorf("explicit names must not report the marker, output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(project, store.MarkerName)); err != nil {
+		t.Fatalf("explicit names must keep the marker: %v", err)
+	}
+}
+
+// --all and --provider are mutually exclusive (cobra rejects before RunE), so
+// nothing is removed.
+func TestUninstallAllWithProviderRejected(t *testing.T) {
+	project, _ := markerProject(t)
+	runXfa(t, "init", "--board", "excltest", "--db", filepath.Join(t.TempDir(), "custom.db"), "--provider", "claude")
+
+	out, err := runXfaErr(t, "uninstall", "--all", "--provider", "claude")
+	if err == nil || !strings.Contains(err.Error(), "none of the others can be") {
+		t.Fatalf("--all --provider must be rejected by cobra, got err=%v out=%q", err, out)
+	}
+	if strings.Contains(out, "removed provider") {
+		t.Fatalf("nothing may run, got %q", out)
+	}
+	for _, p := range []string{filepath.Join(project, ".claude", "skills", "xfa", "SKILL.md"), filepath.Join(project, store.MarkerName)} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("rejected uninstall must remove nothing, %s: %v", p, err)
+		}
+	}
+}
+
+// --provider completion: init and uninstall both offer exactly the registry.
+func TestProviderCompletion(t *testing.T) {
+	for _, c := range []*cobra.Command{initCmd, uninstallCmd} {
+		fn, ok := c.GetFlagCompletionFunc("provider")
+		if !ok {
+			t.Fatalf("%s: no --provider completion registered", c.Name())
+		}
+		got, dir := fn(c, nil, "")
+		if !reflect.DeepEqual(got, install.Names()) || dir != cobra.ShellCompDirectiveNoFileComp {
+			t.Errorf("%s completion = %v (%v), want %v", c.Name(), got, dir, install.Names())
+		}
 	}
 }

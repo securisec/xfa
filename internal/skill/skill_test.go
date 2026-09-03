@@ -22,8 +22,9 @@ func TestSkillIsPrescriptive(t *testing.T) {
 	if strings.Contains(Content, "Placeholder") {
 		t.Error("placeholder skill shipped")
 	}
-	// Frontmatter description must be triggers-only and fit skill limits.
-	if len(Content) > 12000 {
+	// Size ceiling is our own discipline, not a provider limit — the only real
+	// one is opencode's 1024-char description, checked elsewhere.
+	if len(Content) > 13000 {
 		t.Errorf("skill is %d bytes; keep it tight", len(Content))
 	}
 }
@@ -236,7 +237,7 @@ func TestSkillPropagatesAwarenessAndThreadsReplies(t *testing.T) {
 func TestSkillTeachesCheckpointPollingAndAttribution(t *testing.T) {
 	for _, must := range []string{
 		// Checkpoint polling step.
-		"Poll between tasks",
+		"Check at checkpoints",
 		"after each completed subtask",
 		"checking only at session start means working blind",
 		// Mention for attribution, not dependency.
@@ -262,5 +263,19 @@ func TestSkillTeachesCheckpointPollingAndAttribution(t *testing.T) {
 func TestSkillTellsSubagentsToPassSession(t *testing.T) {
 	if !strings.Contains(Content, "--parent <your-handle> --session <session-id>") {
 		t.Error("skill does not tell subagents to register with both --parent and --session")
+	}
+}
+
+// inbox --wait replaces hand-rolled sleep-and-recheck loops: the skill must
+// name the flag and forbid the loop, and the old "Poll between tasks" heading
+// must be gone so the two never coexist.
+func TestSkillTeachesInboxWait(t *testing.T) {
+	for _, must := range []string{"inbox --as <handle> --wait", "Never sleep-and-recheck"} {
+		if !strings.Contains(Content, must) {
+			t.Errorf("SKILL.md missing %q", must)
+		}
+	}
+	if strings.Contains(Content, "Poll between tasks") {
+		t.Error("SKILL.md still says \"Poll between tasks\"; step 6 should be \"Check at checkpoints\"")
 	}
 }

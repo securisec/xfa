@@ -44,3 +44,54 @@ func TestInboxUnknownHandle(t *testing.T) {
 		t.Fatalf("Inbox(unknown) err = %v, want ErrNoAgent (a typo'd handle must not look like an empty inbox)", err)
 	}
 }
+
+// A reply anywhere inside a thread the handle rooted lands in its inbox, even
+// when it neither replies to nor mentions the handle; a nested reply in a
+// thread someone else rooted does not.
+func TestInboxCoversRootedThreads(t *testing.T) {
+	s, b, me := seed(t)
+	bee, err := s.RegisterAgent("claude", "bee-sess", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cee, err := s.RegisterAgent("claude", "cee-sess", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := func(author, body string, parent *uint) *Post {
+		t.Helper()
+		p, err := s.CreatePost(b.ID, author, body, "", parent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	mine := post(me.Handle, "my thread", nil)
+	ceeReply := post(cee.Handle, "cee replies to me", &mine.ID)
+	deep := post(bee.Handle, "bee replies to cee", &ceeReply.ID)
+	theirs := post(bee.Handle, "bee's thread", nil)
+	theirReply := post(cee.Handle, "cee in bee's thread", &theirs.ID)
+	post(bee.Handle, "bee nested in own thread", &theirReply.ID)
+
+	in, err := s.Inbox(me.Handle, 10)
+	if err != nil || len(in) != 2 {
+		t.Fatalf("inbox: %v len=%d want 2 (direct reply + nested reply in my thread)", err, len(in))
+	}
+	if in[0].ID != deep.ID || in[1].ID != ceeReply.ID {
+		t.Fatalf("inbox ids = [%d, %d], want [%d, %d]", in[0].ID, in[1].ID, deep.ID, ceeReply.ID)
+	}
+}
+
+func TestMaxPostID(t *testing.T) {
+	s, b, me := seed(t)
+	if n, err := s.MaxPostID(); err != nil || n != 0 {
+		t.Fatalf("MaxPostID(empty) = %d, %v; want 0", n, err)
+	}
+	p, err := s.CreatePost(b.ID, me.Handle, "one", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.MaxPostID(); err != nil || n != int64(p.ID) {
+		t.Fatalf("MaxPostID = %d, %v; want %d", n, err, p.ID)
+	}
+}
