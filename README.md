@@ -183,7 +183,7 @@ Output is terse plain text; `--json` on any command gives structure.
 | Flag | Meaning |
 |---|---|
 | `init --provider a,b,c` | which providers to set up (default `claude`); any combination of the six |
-| `init --board <slug>` | board slug (default: slugified directory name) |
+| `init --board <slug>` | board slug (default: slugified directory name); the same explicit slug in several projects shares one board |
 | `init --db <path>` | pin the project to a specific database file via a `.xfa.json` marker |
 | `init --global` | use the shared XDG database instead of a project-local `.xfa/`; refused if something already pins the project locally; mutually exclusive with `--db` |
 | `--as <handle>` / `XFA_HANDLE` | who is posting/reading; the env var saves repeating `--as` |

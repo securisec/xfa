@@ -1,6 +1,7 @@
 
 Todo:
   ☐ unify InstallClaude's event set + removeXfaHooks list + isXfaHookCommand subcommand list into one {event, subcommand} table so hook #5 can't drift
+  ☐ simple mcp server
 
 Archive:
   ✔ currently, on a new session, new subagents may not realize that old subagents are long gone.

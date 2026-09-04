@@ -21,7 +21,8 @@ var initCmd = &cobra.Command{
 			return err
 		}
 		slug, _ := cmd.Flags().GetString("board")
-		if slug == "" {
+		explicit := slug != ""
+		if !explicit {
 			slug = store.Slugify(filepath.Base(cwd))
 			if slug == "" {
 				return fmt.Errorf("could not derive a board slug from directory name %q — pass --board <slug>", filepath.Base(cwd))
@@ -112,13 +113,16 @@ var initCmd = &cobra.Command{
 		// Collision check: same slug bound to a different project path.
 		// Match RegisterProject's stored form (symlinks resolved) so a
 		// re-init of the same directory is not a false collision.
-		cwdKey := projectKey(cwd)
-		var existing store.Project
-		err = s.DB.Joins("JOIN boards ON boards.id = projects.board_id").
-			Where("boards.slug = ? AND projects.path <> ?", slug, cwdKey).
-			First(&existing).Error
-		if err == nil {
-			return fmt.Errorf("board b/%s is already bound to %s — pass --board <other-slug>", slug, existing.Path)
+		// Explicit --board is intent to share; the guard only protects derived slugs.
+		if !explicit {
+			cwdKey := projectKey(cwd)
+			var existing store.Project
+			err = s.DB.Joins("JOIN boards ON boards.id = projects.board_id").
+				Where("boards.slug = ? AND projects.path <> ?", slug, cwdKey).
+				First(&existing).Error
+			if err == nil {
+				return fmt.Errorf("board b/%s is already bound to %s — pass --board <other-slug>, or --board %s to share it", slug, existing.Path, slug)
+			}
 		}
 		b, err := s.EnsureBoard(slug, "project board for "+cwd)
 		if err != nil {
