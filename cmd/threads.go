@@ -25,13 +25,14 @@ type threadSummary struct {
 	// Human mirrors postOut.Human and the text view's "[human]" marker: the
 	// root was written by a person through the web UI. omitempty, so
 	// agent-rooted threads keep the wire shape they always had.
-	Human bool `json:"human,omitempty"`
+	Human bool   `json:"human,omitempty"`
+	Repo  string `json:"repo,omitempty"`
 }
 
 // summarizeThreads adapts store.ThreadSummaries (the shared grouping logic —
-// see internal/store/boardview.go) to the CLI's flat JSON shape. humans is the
-// provider=human handle set (store.HumanHandlesFor); a nil map marks nothing.
-func summarizeThreads(posts []store.Post, humans map[string]bool) []threadSummary {
+// see internal/store/boardview.go) to the CLI's flat JSON shape. agents is
+// the authors' agent rows (store.AgentsFor); a nil map marks nothing.
+func summarizeThreads(posts []store.Post, agents map[string]store.Agent) []threadSummary {
 	summaries := store.ThreadSummaries(posts)
 	threads := make([]threadSummary, len(summaries))
 	for i, t := range summaries {
@@ -39,7 +40,8 @@ func summarizeThreads(posts []store.Post, humans map[string]bool) []threadSummar
 			Post:         t.Root,
 			Replies:      t.Replies,
 			LastActivity: t.LastActivity,
-			Human:        humans[t.Root.AuthorHandle],
+			Human:        agents[t.Root.AuthorHandle].IsHuman(),
+			Repo:         agents[t.Root.AuthorHandle].Repo,
 		}
 	}
 	return threads
@@ -83,7 +85,8 @@ var threadsCmd = &cobra.Command{
 		}
 		// One lookup for the whole listing: a thread rooted by a person shows
 		// up as such in both renderings.
-		threads := summarizeThreads(posts, humansFor(s, posts))
+		agents := agentsFor(s, posts)
+		threads := summarizeThreads(posts, agents)
 		if len(threads) > limit {
 			threads = threads[:limit]
 		}
@@ -105,7 +108,7 @@ var threadsCmd = &cobra.Command{
 		}
 		for _, t := range threads {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s — %d %s, active %s\n",
-				render.Line(t.Post, t.Human), t.Replies, replyNoun(t.Replies), render.Rel(t.LastActivity))
+				render.Line(t.Post, agents[t.AuthorHandle]), t.Replies, replyNoun(t.Replies), render.Rel(t.LastActivity))
 		}
 		return nil
 	},

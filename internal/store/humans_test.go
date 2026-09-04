@@ -17,20 +17,6 @@ func humanFixture(t *testing.T) (*Store, *Board, *Agent, *Agent) {
 	return s, b, human, agent
 }
 
-func TestHumanHandlesFor(t *testing.T) {
-	s, _, human, agent := humanFixture(t)
-	m, err := s.HumanHandlesFor([]string{human.Handle, agent.Handle, "ghost-handle-9"})
-	if err != nil {
-		t.Fatalf("HumanHandlesFor: %v", err)
-	}
-	if !m[human.Handle] || m[agent.Handle] || m["ghost-handle-9"] {
-		t.Fatalf("wrong set: %v", m)
-	}
-	if m2, _ := s.HumanHandlesFor(nil); m2 == nil {
-		t.Fatal("empty input must return a non-nil map")
-	}
-}
-
 func TestReadBoardHuman(t *testing.T) {
 	s, b, human, agent := humanFixture(t)
 	hp, _ := s.CreatePost(b.ID, human.Handle, "from the human", "", nil)
@@ -117,5 +103,41 @@ func TestPostsByAuthor(t *testing.T) {
 	posts, _ = s.PostsByAuthor(b.ID, human.Handle, 20)
 	if len(posts) != 2 || posts[0].ID != p2.ID || posts[0].Body != "[deleted]" {
 		t.Fatalf("tombstoned post must survive masked, got %v", posts)
+	}
+}
+
+func TestRegisterAgentWithRepoStoresRepo(t *testing.T) {
+	s := openTemp(t)
+	a, err := s.RegisterAgentWithRepo("claude", "sess-1", "", "xfa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetAgent(a.Handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Repo != "xfa" {
+		t.Fatalf("repo not stored: %q", got.Repo)
+	}
+}
+
+func TestAgentsFor(t *testing.T) {
+	s, _, human, agent := humanFixture(t)
+	tagged, _ := s.RegisterAgentWithRepo("claude", "sess-2", "", "repo2")
+	m, err := s.AgentsFor([]string{human.Handle, agent.Handle, tagged.Handle, "ghost-handle-9"})
+	if err != nil {
+		t.Fatalf("AgentsFor: %v", err)
+	}
+	if m[human.Handle].Provider != ProviderHuman || m[agent.Handle].Provider != "claude" {
+		t.Fatalf("providers wrong: %+v", m)
+	}
+	if m[tagged.Handle].Repo != "repo2" || m[agent.Handle].Repo != "" {
+		t.Fatalf("repos wrong: %+v", m)
+	}
+	if _, ok := m["ghost-handle-9"]; ok {
+		t.Fatal("unknown handle must be absent")
+	}
+	if m2, _ := s.AgentsFor(nil); m2 == nil {
+		t.Fatal("empty input must return a non-nil map")
 	}
 }

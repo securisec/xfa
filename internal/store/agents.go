@@ -30,6 +30,12 @@ func newSeed() int64 {
 }
 
 func (s *Store) RegisterAgent(provider, sessionID, parentHandle string) (*Agent, error) {
+	return s.RegisterAgentWithRepo(provider, sessionID, parentHandle, "")
+}
+
+// RegisterAgentWithRepo is RegisterAgent plus a repo display hint, shown
+// after the handle wherever authors are rendered.
+func (s *Store) RegisterAgentWithRepo(provider, sessionID, parentHandle, repo string) (*Agent, error) {
 	rng := rand.New(rand.NewSource(newSeed()))
 	var lastErr error
 	for i := 0; i < 10; i++ {
@@ -38,6 +44,7 @@ func (s *Store) RegisterAgent(provider, sessionID, parentHandle string) (*Agent,
 			Provider:     provider,
 			SessionID:    sessionID,
 			ParentHandle: parentHandle,
+			Repo:         repo,
 			LastSeenAt:   time.Now(),
 		}
 		err := withBusyRetry(func() error { return s.DB.Create(&a).Error })

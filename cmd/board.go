@@ -55,12 +55,12 @@ var boardCmd = &cobra.Command{
 		}
 		w := cmd.OutOrStdout()
 		// One lookup for the whole board, reused by every thread below.
-		humans := humansFor(s, posts)
+		agents := agentsFor(s, posts)
 		for i, thread := range store.GroupThreads(posts) {
 			if i > 0 {
 				fmt.Fprintln(w) // one blank line between threads
 			}
-			render.Posts(w, thread, render.Depths(thread), store.LinkSets{}, humans)
+			render.Posts(w, thread, render.Depths(thread), store.LinkSets{}, agents)
 		}
 		return nil
 	},

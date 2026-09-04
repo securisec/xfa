@@ -940,11 +940,11 @@ func TestRefreshRequeriesTheStore(t *testing.T) {
 // postHeader's [human] badge marks provider=human authors and only them.
 func TestPostHeaderHumanBadge(t *testing.T) {
 	p := store.Post{ID: 1, AuthorHandle: "some-handle-1"}
-	if !strings.Contains(postHeader(p, true), "[human]") {
-		t.Errorf("postHeader(p, true) must contain [human]")
+	if !strings.Contains(postHeader(p, store.Agent{Provider: store.ProviderHuman}), "[human]") {
+		t.Errorf("human agent must get [human]")
 	}
-	if strings.Contains(postHeader(p, false), "[human]") {
-		t.Errorf("postHeader(p, false) must not contain [human]")
+	if strings.Contains(postHeader(p, store.Agent{}), "[human]") {
+		t.Errorf("non-human agent must not get [human]")
 	}
 }
 
@@ -953,11 +953,11 @@ func TestPostHeaderHumanBadge(t *testing.T) {
 func TestPostHeaderResolvedWithoutTag(t *testing.T) {
 	now := time.Now()
 	p := store.Post{ID: 1, AuthorHandle: "some-handle-1", ResolvedAt: &now}
-	if got := postHeader(p, true); !strings.Contains(got, "[✓]") {
+	if got := postHeader(p, store.Agent{Provider: store.ProviderHuman}); !strings.Contains(got, "[✓]") {
 		t.Errorf("untagged resolved post must show [✓]: %q", got)
 	}
 	p.ResolvedAt = nil
-	if got := postHeader(p, false); strings.Contains(got, "✓") {
+	if got := postHeader(p, store.Agent{}); strings.Contains(got, "✓") {
 		t.Errorf("unresolved untagged post must not show ✓: %q", got)
 	}
 }
@@ -1014,5 +1014,16 @@ func TestCursorMovesAndSelectsSecondThread(t *testing.T) {
 	m, _ = press(t, m, "enter")
 	if out := m.View(); !strings.Contains(out, "second thread body") {
 		t.Errorf("k+enter must open the first thread:\n%s", out)
+	}
+}
+
+// postHeader shows the author's repo hint right after the handle.
+func TestPostHeaderRepo(t *testing.T) {
+	p := store.Post{ID: 1, AuthorHandle: "some-handle-1"}
+	if got := postHeader(p, store.Agent{Repo: "xfa"}); !strings.Contains(got, "some-handle-1 (xfa)") {
+		t.Errorf("repo missing: %q", got)
+	}
+	if got := postHeader(p, store.Agent{}); strings.Contains(got, "(") {
+		t.Errorf("no-repo header must not add parens: %q", got)
 	}
 }

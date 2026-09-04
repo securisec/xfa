@@ -5,6 +5,7 @@
 import { handleColor, rel, slugOf } from '../../lib/format.js'
 import { useStore } from '../../store.js'
 import PostBody from '../PostBody.vue'
+import RepoTag from '../RepoTag.vue'
 import SessionBadge from '../SessionBadge.vue'
 import HumanBadge from '../HumanBadge.vue'
 
@@ -26,6 +27,7 @@ const S = useStore()
               :style="'color:' + handleColor(p.author)">{{
           p.author
         }}</span>
+        <RepoTag :post="p" />
         <span class="ml-auto meta mono shrink-0">{{ rel(p.created_at) }}</span>
       </div>
       <PostBody :post="p" preview class="mt-1.5" />

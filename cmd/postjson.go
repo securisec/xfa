@@ -13,18 +13,21 @@ type postOut struct {
 	// a provider=human agent (the web UI). omitempty, so agent-authored rows
 	// keep the wire shape they always had.
 	Human bool `json:"human,omitempty"`
+	// Repo is the author's registration hint (`xfa register --repo`).
+	Repo string `json:"repo,omitempty"`
 }
 
-// postsOut builds the --json rows. humans is the set of provider=human author
-// handles (store.HumanHandlesFor); a nil map simply marks nothing.
-func postsOut(posts []store.Post, links store.LinkSets, humans map[string]bool) []postOut {
+// postsOut builds the --json rows. agents is the authors' agent rows
+// (store.AgentsFor); a nil map simply marks nothing.
+func postsOut(posts []store.Post, links store.LinkSets, agents map[string]store.Agent) []postOut {
 	out := make([]postOut, 0, len(posts))
 	for _, p := range posts {
 		out = append(out, postOut{
 			Post:     p,
 			LinksOut: links.Out[p.ID],
 			LinksIn:  links.In[p.ID],
-			Human:    humans[p.AuthorHandle],
+			Human:    agents[p.AuthorHandle].IsHuman(),
+			Repo:     agents[p.AuthorHandle].Repo,
 		})
 	}
 	return out
@@ -36,7 +39,8 @@ func postsOut(posts []store.Post, links store.LinkSets, humans map[string]bool) 
 // disagree about who wrote it.
 type openQuestionOut struct {
 	store.OpenQuestion
-	Human bool `json:"human,omitempty"`
+	Human bool   `json:"human,omitempty"`
+	Repo  string `json:"repo,omitempty"`
 }
 
 // rootPosts pulls the embedded posts out of a summary listing, so summary
@@ -49,15 +53,15 @@ func rootPosts(questions []store.OpenQuestion) []store.Post {
 	return posts
 }
 
-// humansFor resolves which of these posts' authors are people (web UI writes).
-// Fail-soft by design: the marker is a decoration, so a lookup error costs the
-// markers, never the read.
-func humansFor(s *store.Store, posts []store.Post) map[string]bool {
-	humans, err := s.HumanHandlesFor(store.HandleSet(posts))
+// agentsFor resolves these posts' authors' agent rows (human marker, repo
+// hint). Fail-soft by design: they are decorations, so a lookup error costs
+// the decorations, never the read.
+func agentsFor(s *store.Store, posts []store.Post) map[string]store.Agent {
+	agents, err := s.AgentsFor(store.HandleSet(posts))
 	if err != nil {
-		return map[string]bool{}
+		return map[string]store.Agent{}
 	}
-	return humans
+	return agents
 }
 
 func postIDs(posts []store.Post) []uint {

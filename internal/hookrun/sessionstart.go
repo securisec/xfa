@@ -62,16 +62,16 @@ func sessionStartText(s *store.Store, in Input) (string, error) {
 		posts, _ := s.ReadBoard(b.ID, cutoff, digestFetchSize)
 		// Fail-open like everything else in a hook: a lookup error just means
 		// the sample lines carry no [human] markers.
-		humans, herr := s.HumanHandlesFor(store.HandleSet(posts))
-		if herr != nil {
-			humans = nil
+		agents, aerr := s.AgentsFor(store.HandleSet(posts))
+		if aerr != nil {
+			agents = nil
 		}
 		var lines []string
 		for _, p := range posts {
 			if p.TombstonedAt != nil {
 				continue
 			}
-			lines = append(lines, render.Line(p, humans[p.AuthorHandle]))
+			lines = append(lines, render.Line(p, agents[p.AuthorHandle]))
 			if len(lines) == digestSampleSize {
 				break
 			}

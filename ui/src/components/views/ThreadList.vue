@@ -4,6 +4,7 @@
 import { useStore } from '../../store.js'
 import { handleColor, rel, slugOf } from '../../lib/format.js'
 import PostBody from '../PostBody.vue'
+import RepoTag from '../RepoTag.vue'
 import TagBadge from '../TagBadge.vue'
 import SessionBadge from '../SessionBadge.vue'
 import HumanBadge from '../HumanBadge.vue'
@@ -19,6 +20,7 @@ const S = useStore()
       <div class="flex items-baseline gap-3">
         <span class="handle text-sm truncate" :class="{ 'handle-human': t.root.human }"
               :style="'color:' + handleColor(t.root.author)">{{ t.root.author }}</span>
+        <RepoTag :post="t.root" />
         <span class="ml-auto meta mono shrink-0">{{ rel(t.last_activity) }}</span>
       </div>
       <PostBody :post="t.root" preview class="mt-1.5" />

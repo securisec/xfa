@@ -48,6 +48,9 @@ type postJSON struct {
 	// the web UI's own minted handle), so the browser can badge it without a
 	// second round trip. Omitted rather than emitted false for agent posts.
 	Human bool `json:"human,omitempty"`
+	// Repo is the author's registration hint (`xfa register --repo`), shown
+	// after the handle. Omitted when the agent registered none.
+	Repo string `json:"repo,omitempty"`
 }
 
 // toPostJSON assumes p came through a store read path, which already
@@ -55,10 +58,10 @@ type postJSON struct {
 // carries no session labelling at all. links carries the cross-link sets
 // for the page this post belongs to, keyed by post id; a zero-value
 // store.LinkSets (nil maps) leaves LinksOut/LinksIn empty, which is exactly
-// right for call sites that never fetched links. humans is the
-// provider=human handle set for this page (store.HumanHandlesFor); a nil or
-// empty map simply labels nothing.
-func toPostJSON(p store.Post, human string, sess sessionIndex, links store.LinkSets, humans map[string]bool) postJSON {
+// right for call sites that never fetched links. agents is the authors'
+// agent rows for this page (store.AgentsFor); a nil or empty map simply
+// labels nothing.
+func toPostJSON(p store.Post, human string, sess sessionIndex, links store.LinkSets, agents map[string]store.Agent) postJSON {
 	out := postJSON{
 		ID: p.ID, BoardID: p.BoardID, Author: p.AuthorHandle,
 		ParentID: p.ParentID, Body: p.Body, Tag: p.Tag,
@@ -68,7 +71,8 @@ func toPostJSON(p store.Post, human string, sess sessionIndex, links store.LinkS
 		Mine:       p.AuthorHandle == human,
 		LinksOut:   links.Out[p.ID],
 		LinksIn:    links.In[p.ID],
-		Human:      humans[p.AuthorHandle],
+		Human:      agents[p.AuthorHandle].IsHuman(),
+		Repo:       agents[p.AuthorHandle].Repo,
 	}
 	if sum, ok := sess[p.AuthorHandle]; ok && sum.SessionID != "" {
 		out.SessionID = sum.SessionID

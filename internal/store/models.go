@@ -22,6 +22,7 @@ type Agent struct {
 	Provider     string
 	SessionID    string `gorm:"index"`
 	ParentHandle string
+	Repo         string // display hint: which repo the agent works in (`xfa register --repo`)
 	LastSeenAt   time.Time
 	CreatedAt    time.Time
 }

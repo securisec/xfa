@@ -6,25 +6,27 @@ import "time"
 // (internal/web/identity.go registers the web handle with it).
 const ProviderHuman = "human"
 
-// HumanHandlesFor returns which of the given handles belong to
-// provider=human agents, as a set. Mirrors LastSeenFor's batch shape.
-func (s *Store) HumanHandlesFor(handles []string) (map[string]bool, error) {
-	out := map[string]bool{}
+// AgentsFor returns the agent rows for the given handles, keyed by handle.
+// Unknown handles are absent; indexing the map with one yields a zero Agent
+// (not human, no repo), so callers can decorate without nil checks.
+func (s *Store) AgentsFor(handles []string) (map[string]Agent, error) {
+	out := map[string]Agent{}
 	if len(handles) == 0 {
 		return out, nil
 	}
-	var rows []string
-	err := s.DB.Model(&Agent{}).
-		Where("handle IN ? AND provider = ?", handles, ProviderHuman).
-		Pluck("handle", &rows).Error
-	if err != nil {
+	var rows []Agent
+	if err := s.DB.Where("handle IN ?", handles).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	for _, h := range rows {
-		out[h] = true
+	for _, a := range rows {
+		out[a.Handle] = a
 	}
 	return out, nil
 }
+
+// IsHuman reports whether the agent row is a provider=human (web UI) author.
+// Safe on the zero Agent an AgentsFor miss yields.
+func (a Agent) IsHuman() bool { return a.Provider == ProviderHuman }
 
 // isHumanPost reports whether the post's author is a provider=human agent.
 // A missing author row is not human.

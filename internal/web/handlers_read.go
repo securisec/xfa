@@ -70,23 +70,23 @@ func boardPostsForRequest(s *store.Store, r *http.Request, boardID uint) ([]stor
 
 // postsJSON maps a store slice to the wire shape, always non-nil so the
 // client sees [] rather than null.
-func postsJSON(posts []store.Post, human string, sess sessionIndex, links store.LinkSets, humans map[string]bool) []postJSON {
+func postsJSON(posts []store.Post, human string, sess sessionIndex, links store.LinkSets, agents map[string]store.Agent) []postJSON {
 	out := make([]postJSON, 0, len(posts))
 	for _, p := range posts {
-		out = append(out, toPostJSON(p, human, sess, links, humans))
+		out = append(out, toPostJSON(p, human, sess, links, agents))
 	}
 	return out
 }
 
-// humanHandlesForPosts fetches the provider=human subset of posts' authors
-// for this page, fail-soft to an empty map: a lookup failure should blank
-// the human badge, not the whole read.
-func humanHandlesForPosts(s *store.Store, posts []store.Post) map[string]bool {
-	humans, err := s.HumanHandlesFor(store.HandleSet(posts))
+// agentsForPosts fetches the agent rows of this page's authors, fail-soft to
+// an empty map: a lookup failure should blank the human badge and repo hint,
+// not the whole read.
+func agentsForPosts(s *store.Store, posts []store.Post) map[string]store.Agent {
+	agents, err := s.AgentsFor(store.HandleSet(posts))
 	if err != nil {
-		return map[string]bool{}
+		return map[string]store.Agent{}
 	}
-	return humans
+	return agents
 }
 
 type boardJSON struct {
@@ -217,7 +217,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		humans := humanHandlesForPosts(s, posts)
+		agents := agentsForPosts(s, posts)
 		// Summarizing needs the whole board (a reply anywhere decides its
 		// root's activity), so the limit is applied to the summaries, not
 		// to the fetch.
@@ -228,7 +228,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 		out := make([]threadJSON, 0, len(summaries))
 		for _, t := range summaries {
 			out = append(out, threadJSON{
-				Root:         toPostJSON(t.Root, human, sess, store.LinkSets{}, humans),
+				Root:         toPostJSON(t.Root, human, sess, store.LinkSets{}, agents),
 				Replies:      t.Replies,
 				LastActivity: t.LastActivity,
 			})
@@ -252,11 +252,11 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		humans := humanHandlesForPosts(s, posts)
+		agents := agentsForPosts(s, posts)
 		groups := store.GroupThreads(posts)
 		out := make([][]postJSON, 0, len(groups))
 		for _, g := range groups {
-			out = append(out, postsJSON(g, human, sess, store.LinkSets{}, humans))
+			out = append(out, postsJSON(g, human, sess, store.LinkSets{}, agents))
 		}
 		writeJSON(w, http.StatusOK, out)
 	})
@@ -300,8 +300,8 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			// an otherwise-good thread render.
 			links = store.LinkSets{}
 		}
-		humans := humanHandlesForPosts(s, posts)
-		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, links, humans))
+		agents := agentsForPosts(s, posts)
+		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, links, agents))
 	})
 
 	mux.HandleFunc("GET /api/search", func(w http.ResponseWriter, r *http.Request) {
@@ -325,8 +325,8 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		humans := humanHandlesForPosts(s, posts)
-		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, humans))
+		agents := agentsForPosts(s, posts)
+		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, agents))
 	})
 
 	mux.HandleFunc("GET /api/questions", func(w http.ResponseWriter, r *http.Request) {
@@ -349,11 +349,11 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 		for _, q := range questions {
 			qPosts = append(qPosts, q.Post)
 		}
-		humans := humanHandlesForPosts(s, qPosts)
+		agents := agentsForPosts(s, qPosts)
 		out := make([]questionJSON, 0, len(questions))
 		for _, q := range questions {
 			out = append(out, questionJSON{
-				postJSON:        toPostJSON(q.Post, human, sess, store.LinkSets{}, humans),
+				postJSON:        toPostJSON(q.Post, human, sess, store.LinkSets{}, agents),
 				Replies:         q.Replies,
 				AskerLastSeenAt: q.AskerLastSeenAt,
 			})
@@ -380,8 +380,8 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		humans := humanHandlesForPosts(s, posts)
-		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, humans))
+		agents := agentsForPosts(s, posts)
+		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, agents))
 	})
 
 	// The human's own posts and replies, board-scoped like /api/stats:
@@ -402,8 +402,8 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		humans := humanHandlesForPosts(s, posts)
-		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, humans))
+		agents := agentsForPosts(s, posts)
+		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, agents))
 	})
 
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {

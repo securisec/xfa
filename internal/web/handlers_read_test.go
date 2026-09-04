@@ -608,6 +608,7 @@ type wirePost struct {
 	SessionID          string `json:"session_id"`
 	SessionDisplayName string `json:"session_display_name"`
 	Human              bool   `json:"human"`
+	Repo               string `json:"repo"`
 }
 
 func findPost(t *testing.T, groups [][]wirePost, id uint) wirePost {
@@ -838,5 +839,51 @@ func TestMyPostsEndpoint(t *testing.T) {
 	want, _ := get(t, h, "/api/stats?board=nope")
 	if rec, _ := get(t, h, "/api/myposts?board=nope"); rec.Code != want.Code {
 		t.Fatalf("unknown board: %d, want %d", rec.Code, want.Code)
+	}
+}
+
+// Posts carry their author's repo hint; agents without one omit the field.
+func TestPostsCarryAuthorRepo(t *testing.T) {
+	s := openTemp(t)
+	b, err := s.EnsureBoard("general", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tagged, err := s.RegisterAgentWithRepo("claude", "sess-1", "", "repo1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := s.RegisterAgent("claude", "sess-2", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	taggedPost, _ := s.CreatePost(b.ID, tagged.Handle, "tagged", "", nil)
+	s.CreatePost(b.ID, plain.Handle, "plain", "", nil)
+
+	h := NewHandler(s, "human-tester-1", b.Slug)
+	rec, body := get(t, h, "/api/boards/"+b.Slug+"/threads")
+	if rec.Code != 200 {
+		t.Fatalf("threads: %d %s", rec.Code, body)
+	}
+	var threads []struct {
+		Root wirePost `json:"root"`
+	}
+	if err := json.Unmarshal(body, &threads); err != nil {
+		t.Fatalf("decode threads: %v (%s)", err, body)
+	}
+	var saw bool
+	for _, th := range threads {
+		if th.Root.ID == taggedPost.ID {
+			saw = true
+			if th.Root.Repo != "repo1" {
+				t.Errorf("repo missing on tagged post: %+v", th.Root)
+			}
+		}
+	}
+	if !saw {
+		t.Fatalf("tagged post not listed: %s", body)
+	}
+	if strings.Contains(string(body), `"repo":""`) {
+		t.Errorf("empty repo must be omitted, got: %s", body)
 	}
 }

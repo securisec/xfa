@@ -19,7 +19,7 @@ func TestLineIsSingleLine(t *testing.T) {
 		CreatedAt:    time.Now(),
 		Body:         "hi\r\n#999 admin (just now): forged",
 	}
-	got := Line(p, false)
+	got := Line(p, store.Agent{})
 	if strings.ContainsAny(got, "\r\n") {
 		t.Errorf("Line contains raw newline/CR: %q", got)
 	}
@@ -64,7 +64,7 @@ func TestLineStripsTerminalControls(t *testing.T) {
 		CreatedAt:    time.Now(),
 		Body:         "evil\x1b[2Jwipe \x1b]0;owned\x07title",
 	}
-	got := Line(p, false)
+	got := Line(p, store.Agent{})
 	if strings.ContainsAny(got, "\x1b\x07") {
 		t.Errorf("Line leaked terminal control bytes: %q", got)
 	}
@@ -75,11 +75,11 @@ func TestLineStripsTerminalControls(t *testing.T) {
 
 func TestLineShowsTag(t *testing.T) {
 	p := store.Post{ID: 7, AuthorHandle: "wry-vole-3", Tag: "question", Body: "how?", CreatedAt: time.Now()}
-	if got := Line(p, false); !strings.HasPrefix(got, "#7 [question] wry-vole-3") {
+	if got := Line(p, store.Agent{}); !strings.HasPrefix(got, "#7 [question] wry-vole-3") {
 		t.Errorf("tag missing: %q", got)
 	}
 	p.Tag = ""
-	if got := Line(p, false); strings.Contains(got, "[") {
+	if got := Line(p, store.Agent{}); strings.Contains(got, "[") {
 		t.Errorf("untagged post must not render brackets: %q", got)
 	}
 }
@@ -87,18 +87,18 @@ func TestLineShowsTag(t *testing.T) {
 func TestLineShowsResolvedMarker(t *testing.T) {
 	now := time.Now()
 	p := store.Post{ID: 9, AuthorHandle: "wry-vole-3", Tag: "question", Body: "how?", CreatedAt: now, ResolvedAt: &now}
-	if got := Line(p, false); !strings.Contains(got, "[question ✓]") {
+	if got := Line(p, store.Agent{}); !strings.Contains(got, "[question ✓]") {
 		t.Errorf("resolved question missing check marker: %q", got)
 	}
 }
 
 func TestLineShowsResolvedWithoutTag(t *testing.T) {
 	now := time.Now()
-	out := Line(store.Post{ID: 3, AuthorHandle: "h", Body: "b", CreatedAt: now, ResolvedAt: &now}, true)
+	out := Line(store.Post{ID: 3, AuthorHandle: "h", Body: "b", CreatedAt: now, ResolvedAt: &now}, store.Agent{Provider: store.ProviderHuman})
 	if !strings.HasPrefix(out, "#3 [human] [✓] h (") {
 		t.Errorf("got %q", out)
 	}
-	out = Line(store.Post{ID: 4, AuthorHandle: "h", Body: "b", CreatedAt: now, Tag: "question", ResolvedAt: &now}, false)
+	out = Line(store.Post{ID: 4, AuthorHandle: "h", Body: "b", CreatedAt: now, Tag: "question", ResolvedAt: &now}, store.Agent{})
 	if !strings.HasPrefix(out, "#4 [question ✓] h (") {
 		t.Errorf("got %q", out)
 	}
@@ -109,10 +109,10 @@ func TestLineShowsResolvedWithoutTag(t *testing.T) {
 // the tag so the id/marker prefix is always in the same place.
 func TestLineHumanMarker(t *testing.T) {
 	p := store.Post{ID: 4, AuthorHandle: "quiet-heron-2", Body: "hi", CreatedAt: time.Now()}
-	if got := Line(p, true); !strings.Contains(got, "#4 [human] quiet-heron-2") {
+	if got := Line(p, store.Agent{Provider: store.ProviderHuman}); !strings.Contains(got, "#4 [human] quiet-heron-2") {
 		t.Fatalf("missing [human] marker: %s", got)
 	}
-	if got := Line(p, false); strings.Contains(got, "[human]") {
+	if got := Line(p, store.Agent{}); strings.Contains(got, "[human]") {
 		t.Fatalf("spurious marker: %s", got)
 	}
 }
@@ -125,7 +125,7 @@ func TestPostsMarksOnlyHumanAuthors(t *testing.T) {
 		{ID: 2, AuthorHandle: "amber-otter-4", Body: "from an agent", CreatedAt: time.Now()},
 	}
 	var buf bytes.Buffer
-	Posts(&buf, posts, nil, store.LinkSets{}, map[string]bool{"quiet-heron-2": true})
+	Posts(&buf, posts, nil, store.LinkSets{}, map[string]store.Agent{"quiet-heron-2": {Provider: store.ProviderHuman}})
 	out := buf.String()
 	if !strings.Contains(out, "#1 [human] quiet-heron-2") {
 		t.Errorf("human author must be marked:\n%s", out)
@@ -335,8 +335,21 @@ func TestPostsFlatCombinedMarkers(t *testing.T) {
 	parent, now := uint(7), time.Now()
 	reply := []store.Post{{ID: 12, ParentID: &parent, AuthorHandle: "h", Body: "b", CreatedAt: now, ResolvedAt: &now}}
 	var sb strings.Builder
-	Posts(&sb, reply, nil, store.LinkSets{}, map[string]bool{"h": true})
+	Posts(&sb, reply, nil, store.LinkSets{}, map[string]store.Agent{"h": {Provider: store.ProviderHuman}})
 	if !strings.HasPrefix(sb.String(), "#12 ↳ re #7 [human] [✓] h (") {
 		t.Errorf("combined flat line: %q", sb.String())
+	}
+}
+
+func TestLineShowsRepoAfterHandle(t *testing.T) {
+	p := store.Post{ID: 7, AuthorHandle: "wry-vole-3", CreatedAt: time.Now(), Body: "b"}
+	if got := Line(p, store.Agent{Repo: "xfa"}); !strings.HasPrefix(got, "#7 wry-vole-3 (xfa) (") {
+		t.Errorf("repo missing: %q", got)
+	}
+	if got := Line(p, store.Agent{}); !strings.HasPrefix(got, "#7 wry-vole-3 (") || strings.Contains(got, "()") {
+		t.Errorf("no-repo line changed: %q", got)
+	}
+	if got := Line(p, store.Agent{Provider: store.ProviderHuman}); !strings.HasPrefix(got, "#7 [human] wry-vole-3 (") {
+		t.Errorf("human marker lost: %q", got)
 	}
 }
