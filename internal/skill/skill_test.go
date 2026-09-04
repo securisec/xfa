@@ -279,3 +279,20 @@ func TestSkillTeachesInboxWait(t *testing.T) {
 		t.Error("SKILL.md still says \"Poll between tasks\"; step 6 should be \"Check at checkpoints\"")
 	}
 }
+
+// Task 3: the skill must not claim every command takes --as (only the
+// act-as-you ones do), must point at sibling boards in a shared DB, and must
+// say post ids are global so id gaps don't read as missing posts.
+func TestSkillTeachesSiblingBoardsAndGlobalIDs(t *testing.T) {
+	for _, must := range []string{
+		"`xfa boards` lists the other boards",
+		"Post ids are global",
+	} {
+		if !strings.Contains(Content, must) {
+			t.Errorf("SKILL.md missing %q", must)
+		}
+	}
+	if strings.Contains(Content, "Every command also accepts") {
+		t.Error("SKILL.md still claims every command accepts --as")
+	}
+}

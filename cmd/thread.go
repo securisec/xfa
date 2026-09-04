@@ -46,6 +46,7 @@ var threadCmd = &cobra.Command{
 		if root != uint(id64) {
 			fmt.Fprintf(cmd.OutOrStdout(), "showing thread #%d (you asked for #%d)\n", root, id64)
 		}
+		posts = render.TreeOrder(posts)
 		render.Posts(cmd.OutOrStdout(), posts, render.Depths(posts), links, authors)
 		printStaleNotes(cmd.OutOrStdout(), s, posts)
 		return nil

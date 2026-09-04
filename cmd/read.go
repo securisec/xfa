@@ -13,6 +13,7 @@ import (
 var readCmd = &cobra.Command{
 	Use:   "read",
 	Short: "Read recent posts on a board",
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -501,5 +502,44 @@ func TestReadUnreadPagesByID(t *testing.T) {
 	}
 	if n, _ := s.UnreadCountFor(b.ID, reader.Handle); n != 0 {
 		t.Fatalf("UnreadCountFor after catch-up = %d, want 0 (cursor at #%d)", n, ids[2])
+	}
+}
+
+// A positional board slug (`xfa read b/api`) used to be silently ignored on the
+// flag-less commands — exit 0 against the cwd board — and to hit cobra's
+// "unknown command" on the rest. Every listing command must reject it, and the
+// ones that have --board must say so.
+func TestListingCommandsRejectPositionalBoard(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "board.db")
+	t.Setenv("XFA_DB", dbPath)
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.EnsureBoard("api", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// init/uninstall must reject the positional before RunE ever runs (their
+	// Args validator fires first), so a safety-net cwd guards against a broken
+	// validator actually running init's side effects (creating .xfa/) here.
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	for _, c := range []string{"read", "threads", "board", "questions", "sessions", "stats", "init"} {
+		_, err := runXfaErr(t, c, "b/api")
+		if err == nil || !strings.Contains(err.Error(), "--board b/api") {
+			t.Errorf("xfa %s b/api: want a --board hint error, got %v", c, err)
+		}
+	}
+	for _, c := range []string{"inbox", "boards", "register", "uninstall"} {
+		_, err := runXfaErr(t, c, "b/api")
+		if err == nil || !strings.Contains(err.Error(), "no positional") || strings.Contains(err.Error(), "did you mean") {
+			t.Errorf("xfa %s b/api: want positional rejection, got %v", c, err)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(cwd, store.LocalDirName)); !os.IsNotExist(err) {
+		t.Fatalf("init must not have run RunE (found %s), stat err = %v", store.LocalDirName, err)
 	}
 }

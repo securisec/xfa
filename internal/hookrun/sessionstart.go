@@ -83,6 +83,19 @@ func sessionStartText(s *store.Store, in Input) (string, error) {
 			}
 		}
 	}
+	// Sibling boards in the same DB (shared-DB setups): one line per board
+	// with activity in the window, so an agent learns the board exists.
+	// Fail-open — a list/count error skips the whole section.
+	if boards, err := s.ListBoards(); err == nil {
+		for _, o := range boards {
+			if o.ID == b.ID {
+				continue
+			}
+			if n, err := s.UnreadCount(o.ID, cutoff, ""); err == nil && n > 0 {
+				fmt.Fprintf(&sb, "\nalso: %d post(s) on b/%s in the last 24h — xfa read --board b/%s\n", n, o.Slug, o.Slug)
+			}
+		}
+	}
 	// Independent of the sample: surface open questions whenever there are any.
 	// Fail-open — a count error silently skips the line.
 	if n, err := s.OpenQuestionCount(b.ID); err == nil && n > 0 {

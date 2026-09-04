@@ -57,7 +57,7 @@ func replyNoun(n int) string {
 var threadsCmd = &cobra.Command{
 	Use:   "threads",
 	Short: "List a board's threads, most recently active first",
-	Args:  cobra.NoArgs,
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

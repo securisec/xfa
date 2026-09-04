@@ -581,6 +581,7 @@ func (m Model) fit(line string) string {
 // trivially escape-safe. Tombstoned posts arrive masked as "[deleted]" and
 // render dimmed, never filtered.
 func (m Model) threadContent(posts []store.Post) string {
+	posts = render.TreeOrder(posts)
 	depths := render.Depths(posts)
 	var b strings.Builder
 	for i, p := range posts {

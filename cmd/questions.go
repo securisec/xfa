@@ -13,7 +13,7 @@ import (
 var questionsCmd = &cobra.Command{
 	Use:   "questions",
 	Short: "List open (unresolved) questions",
-	Args:  cobra.NoArgs,
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

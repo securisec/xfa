@@ -10,6 +10,7 @@ import (
 var registerCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Mint a handle for this agent session",
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider, _ := cmd.Flags().GetString("provider")
 		session, _ := cmd.Flags().GetString("session")

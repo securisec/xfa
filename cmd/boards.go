@@ -10,6 +10,7 @@ import (
 var boardsCmd = &cobra.Command{
 	Use:   "boards",
 	Short: "List all boards",
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

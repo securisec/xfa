@@ -14,6 +14,7 @@ import (
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
+	Args:  noPositional,
 	Short: "Remove xfa hooks and skills from this project (board data is kept)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()

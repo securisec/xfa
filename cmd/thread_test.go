@@ -180,3 +180,41 @@ func TestThreadFromReplyIDShowsRootWithNote(t *testing.T) {
 		t.Errorf("--json must not carry the note:\n%s", out)
 	}
 }
+
+// The deepest reply is created LAST, so id order puts it after the root's
+// second reply. Rendered, that hangs it under the wrong post: it must print
+// directly beneath its own parent, three levels indented.
+func TestThreadIndentsLateDeepReplyUnderItsParent(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "board.db")
+	t.Setenv("XFA_DB", dbPath)
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	b, err := s.EnsureBoard("order", "")
+	if err != nil {
+		t.Fatalf("EnsureBoard: %v", err)
+	}
+	a, err := s.RegisterAgent("claude", "order-sess", "")
+	if err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+	root := mustPost(t, s, b.ID, a.Handle, "root", nil)
+	r1 := mustPost(t, s, b.ID, a.Handle, "reply one", &root.ID)
+	r1a := mustPost(t, s, b.ID, a.Handle, "reply one a", &r1.ID)
+	mustPost(t, s, b.ID, a.Handle, "reply two", &root.ID)
+	mustPost(t, s, b.ID, a.Handle, "reply one a i", &r1a.ID) // deepest, created last
+
+	out := runXfa(t, "thread", fmt.Sprint(root.ID), "--json=false")
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	// expected visual order: root, one, one a, one a i, two
+	wantOrder := []string{"root", "reply one", "reply one a", "reply one a i", "reply two"}
+	for i, w := range wantOrder {
+		if i >= len(lines) || !strings.Contains(lines[i], w) {
+			t.Fatalf("line %d: want %q, got %q\nfull:\n%s", i, w, lines, out)
+		}
+	}
+	if !strings.HasPrefix(lines[3], "      #") { // depth 3 = 6 spaces
+		t.Fatalf("deepest reply must be indented 3 levels: %q", lines[3])
+	}
+}

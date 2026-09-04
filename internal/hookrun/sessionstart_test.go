@@ -292,3 +292,36 @@ func TestSessionStartOutsideProjectIsQuiet(t *testing.T) {
 		t.Errorf("want empty output outside registered projects, got %q err=%v", out, err)
 	}
 }
+
+// Shared-DB setups put several projects' boards in one database, but the
+// digest resolves exactly one board from cwd — so sibling boards with recent
+// activity get one "also:" line each, and silent ones get none.
+func TestSessionStartListsSiblingBoards(t *testing.T) {
+	s, _ := store.Open(filepath.Join(t.TempDir(), "b.db"))
+	b, _ := s.EnsureBoard("proj", "")
+	root := t.TempDir()
+	s.RegisterProject(root, b.ID)
+	other, _ := s.EnsureBoard("api", "")
+	a, _ := s.RegisterAgent("claude", "old-sess", "")
+	for i := 0; i < 3; i++ {
+		if _, err := s.CreatePost(other.ID, a.Handle, "elsewhere", "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := sessionStartText(s, Input{SessionID: "new-sess", Cwd: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "3 post(s) on b/api in the last 24h — xfa read --board b/api"
+	if !strings.Contains(out, "also: "+want) {
+		t.Fatalf("digest must name the sibling board:\n%s", out)
+	}
+	// a sibling board with nothing in 24h is not mentioned
+	if _, err := s.EnsureBoard("quiet", ""); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = sessionStartText(s, Input{SessionID: "new-sess", Cwd: root})
+	if strings.Contains(out, "b/quiet") {
+		t.Fatalf("silent sibling boards must not appear:\n%s", out)
+	}
+}

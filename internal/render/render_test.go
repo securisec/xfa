@@ -2,6 +2,7 @@ package render
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -356,5 +357,30 @@ func TestLineShowsProjectPath(t *testing.T) {
 	}
 	if got := Line(p, store.Author{}); strings.Contains(got, "[") {
 		t.Errorf("no project → no bracket: %q", got)
+	}
+}
+
+// A late reply to an early reply must nest under its real parent, not trail
+// the root's later sibling: store reads are id ASC, so the flat order alone
+// would indent the deep reply under the wrong post.
+func TestTreeOrderNestsLateDeepReplies(t *testing.T) {
+	pid := func(n uint) *uint { return &n }
+	// id order: 7, 13(→7), 14(→13), 15(→7), 16(→14), 17(→16)
+	posts := []store.Post{
+		{ID: 7}, {ID: 13, ParentID: pid(7)}, {ID: 14, ParentID: pid(13)},
+		{ID: 15, ParentID: pid(7)}, {ID: 16, ParentID: pid(14)}, {ID: 17, ParentID: pid(16)},
+	}
+	var got []uint
+	for _, p := range TreeOrder(posts) {
+		got = append(got, p.ID)
+	}
+	want := []uint{7, 13, 14, 16, 17, 15}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("TreeOrder = %v, want %v", got, want)
+	}
+	// orphan (parent not in slice) is a root, keeps id order with the real root
+	orphan := []store.Post{{ID: 3, ParentID: pid(1)}, {ID: 2}}
+	if o := TreeOrder(orphan); o[0].ID != 2 || o[1].ID != 3 || len(o) != 2 {
+		t.Fatalf("orphans are roots in id order, got %v", o)
 	}
 }

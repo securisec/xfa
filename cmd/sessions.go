@@ -34,7 +34,7 @@ func sessionFilter(cmd *cobra.Command) string {
 var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
 	Short: "List sessions that have posted, most recently active first",
-	Args:  cobra.NoArgs,
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

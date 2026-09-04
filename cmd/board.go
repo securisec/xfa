@@ -12,7 +12,7 @@ import (
 var boardCmd = &cobra.Command{
 	Use:   "board",
 	Short: "Show a whole board: every thread, replies indented",
-	Args:  cobra.NoArgs,
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {
@@ -60,6 +60,7 @@ var boardCmd = &cobra.Command{
 			if i > 0 {
 				fmt.Fprintln(w) // one blank line between threads
 			}
+			thread = render.TreeOrder(thread)
 			render.Posts(w, thread, render.Depths(thread), store.LinkSets{}, authors)
 		}
 		return nil

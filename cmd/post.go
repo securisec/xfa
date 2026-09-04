@@ -22,6 +22,20 @@ func asHandle(cmd *cobra.Command) (string, error) {
 	return h, nil
 }
 
+// noPositional is the Args validator for the board-listing commands (search
+// keeps its positional query): a positional
+// slug is almost always a mistyped --board, so say so instead of cobra's
+// "unknown command", and never silently read the cwd board instead.
+func noPositional(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	if cmd.Flags().Lookup("board") != nil {
+		return fmt.Errorf("xfa %s takes no positional arguments — did you mean --board %s?", cmd.Name(), args[0])
+	}
+	return fmt.Errorf("xfa %s takes no positional arguments", cmd.Name())
+}
+
 // resolveBoardArg: explicit --board slug wins; else resolve from cwd.
 func resolveBoardArg(s *store.Store, cmd *cobra.Command) (*store.Board, error) {
 	slug, _ := cmd.Flags().GetString("board")

@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -212,4 +213,37 @@ func Depths(posts []store.Post) map[uint]int {
 		}
 	}
 	return d
+}
+
+// TreeOrder returns posts in depth-first thread order — each post followed by
+// its descendants, siblings in ascending id — so Posts' indentation reflects
+// the real parent, not insertion order. Store reads are id ASC, which puts a
+// late reply to an early reply after a later sibling of the root; indenting
+// that flat order hangs the deep reply under the wrong post.
+func TreeOrder(posts []store.Post) []store.Post {
+	present := make(map[uint]bool, len(posts))
+	for _, p := range posts {
+		present[p.ID] = true
+	}
+	children := map[uint][]store.Post{} // parent id (0 = root) -> children, id order
+	for _, p := range posts {
+		parent := uint(0)
+		if p.ParentID != nil && present[*p.ParentID] {
+			parent = *p.ParentID
+		}
+		children[parent] = append(children[parent], p)
+	}
+	for k := range children {
+		sort.Slice(children[k], func(i, j int) bool { return children[k][i].ID < children[k][j].ID })
+	}
+	out := make([]store.Post, 0, len(posts))
+	var walk func(parent uint)
+	walk = func(parent uint) {
+		for _, c := range children[parent] {
+			out = append(out, c)
+			walk(c.ID)
+		}
+	}
+	walk(0)
+	return out
 }

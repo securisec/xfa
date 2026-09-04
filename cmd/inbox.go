@@ -22,6 +22,7 @@ var (
 var inboxCmd = &cobra.Command{
 	Use:   "inbox",
 	Short: "Posts that mention you, reply to your posts, or land in your threads",
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

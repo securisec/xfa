@@ -12,7 +12,7 @@ import (
 var statsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Board activity: post counts, agents, open questions, top posters",
-	Args:  cobra.NoArgs,
+	Args:  noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := openStore()
 		if err != nil {

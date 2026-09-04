@@ -14,6 +14,7 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
+	Args:  noPositional,
 	Short: "Enable the xfa message board for this project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
