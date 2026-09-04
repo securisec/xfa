@@ -2,6 +2,8 @@ package store
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -256,5 +258,46 @@ func TestMarksRoundTrip(t *testing.T) {
 	}
 	if v, ok, err := s.GetMark("stop-sess"); err != nil || !ok || v != "" {
 		t.Fatalf("GetMark(fire-once row) = %q, %v, %v; want \"\", true, nil", v, ok, err)
+	}
+}
+
+func TestRegisterAgentAtRecordsProject(t *testing.T) {
+	s := openTemp(t)
+	b, _ := s.EnsureBoard("proj", "")
+	dir := t.TempDir()
+	if err := s.RegisterProject(dir, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	// nested cwd resolves through the same walk-up ResolveBoard uses
+	nested := filepath.Join(dir, "src", "deep")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.RegisterAgentAt(nested, "claude", "sess-p", "")
+	if err != nil {
+		t.Fatalf("RegisterAgentAt: %v", err)
+	}
+	var p Project
+	if err := s.DB.Where("path = ?", normalizePath(dir)).First(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	if a.ProjectID == nil || *a.ProjectID != p.ID {
+		t.Fatalf("ProjectID = %v, want %d", a.ProjectID, p.ID)
+	}
+	// unregistered cwd: NULL, no error
+	u, err := s.RegisterAgentAt(t.TempDir(), "claude", "sess-u", "")
+	if err != nil {
+		t.Fatalf("unregistered cwd must not error: %v", err)
+	}
+	if u.ProjectID != nil {
+		t.Fatalf("unregistered cwd must leave ProjectID nil, got %d", *u.ProjectID)
+	}
+	// legacy signature unchanged: NULL
+	l, err := s.RegisterAgent("claude", "sess-l", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.ProjectID != nil {
+		t.Fatal("RegisterAgent must leave ProjectID nil")
 	}
 }

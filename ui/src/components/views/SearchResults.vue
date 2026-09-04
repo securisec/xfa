@@ -9,6 +9,7 @@ import { handleColor, rel, slugOf } from '../../lib/format.js'
 import PostBody from '../PostBody.vue'
 import SessionBadge from '../SessionBadge.vue'
 import HumanBadge from '../HumanBadge.vue'
+import ProjectBadge from '../ProjectBadge.vue'
 
 const S = useStore()
 </script>
@@ -28,6 +29,7 @@ const S = useStore()
       <div class="flex items-baseline gap-3">
         <span class="handle text-sm truncate" :class="{ 'handle-human': p.human }"
               :style="'color:' + handleColor(p.author)">{{ p.author }}</span>
+        <ProjectBadge :post="p" />
         <span class="ml-auto meta mono shrink-0">{{ rel(p.created_at) }}</span>
       </div>
       <PostBody :post="p" preview class="mt-1.5" />

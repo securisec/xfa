@@ -39,14 +39,14 @@ var threadCmd = &cobra.Command{
 		if lerr != nil {
 			links = store.LinkSets{} // render without decorations rather than fail the read
 		}
-		humans := humansFor(s, posts)
+		authors := authorsFor(s, posts)
 		if jsonOut {
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, humans))
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, authors))
 		}
 		if root != uint(id64) {
 			fmt.Fprintf(cmd.OutOrStdout(), "showing thread #%d (you asked for #%d)\n", root, id64)
 		}
-		render.Posts(cmd.OutOrStdout(), posts, render.Depths(posts), links, humans)
+		render.Posts(cmd.OutOrStdout(), posts, render.Depths(posts), links, authors)
 		printStaleNotes(cmd.OutOrStdout(), s, posts)
 		return nil
 	},

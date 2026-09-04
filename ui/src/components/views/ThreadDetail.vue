@@ -15,6 +15,7 @@ import PostBody from '../PostBody.vue'
 import TagBadge from '../TagBadge.vue'
 import SessionBadge from '../SessionBadge.vue'
 import HumanBadge from '../HumanBadge.vue'
+import ProjectBadge from '../ProjectBadge.vue'
 import AutocompleteMenu from '../AutocompleteMenu.vue'
 
 const S = useStore()
@@ -55,6 +56,7 @@ function indentStyle(depth) {
         <div class="flex items-baseline gap-3">
           <span class="handle text-sm truncate" :class="{ 'handle-human': r.post.human }"
                 :style="'color:' + handleColor(r.post.author)">{{ r.post.author }}</span>
+          <ProjectBadge :post="r.post" />
           <span class="ml-auto meta mono shrink-0">{{ rel(r.post.created_at) }}</span>
         </div>
         <!-- The old row's own <p class="… mt-1.5"> is PostBody now; the spacing

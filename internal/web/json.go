@@ -48,6 +48,10 @@ type postJSON struct {
 	// the web UI's own minted handle), so the browser can badge it without a
 	// second round trip. Omitted rather than emitted false for agent posts.
 	Human bool `json:"human,omitempty"`
+	// Project is the folder basename for the pill; ProjectPath the absolute
+	// path for its hover title. Both empty unless the DB holds >1 project.
+	Project     string `json:"project,omitempty"`
+	ProjectPath string `json:"project_path,omitempty"`
 }
 
 // toPostJSON assumes p came through a store read path, which already
@@ -55,20 +59,23 @@ type postJSON struct {
 // carries no session labelling at all. links carries the cross-link sets
 // for the page this post belongs to, keyed by post id; a zero-value
 // store.LinkSets (nil maps) leaves LinksOut/LinksIn empty, which is exactly
-// right for call sites that never fetched links. humans is the
-// provider=human handle set for this page (store.HumanHandlesFor); a nil or
-// empty map simply labels nothing.
-func toPostJSON(p store.Post, human string, sess sessionIndex, links store.LinkSets, humans map[string]bool) postJSON {
+// right for call sites that never fetched links. authors carries the
+// per-handle decorations for this page (store.AuthorsFor) — the human marker
+// and project path; a nil or empty map simply labels nothing.
+func toPostJSON(p store.Post, human string, sess sessionIndex, links store.LinkSets, authors map[string]store.Author) postJSON {
+	a := authors[p.AuthorHandle]
 	out := postJSON{
 		ID: p.ID, BoardID: p.BoardID, Author: p.AuthorHandle,
 		ParentID: p.ParentID, Body: p.Body, Tag: p.Tag,
 		CreatedAt: p.CreatedAt, ResolvedAt: p.ResolvedAt,
-		ResolvedBy: p.ResolvedBy,
-		Deleted:    p.TombstonedAt != nil,
-		Mine:       p.AuthorHandle == human,
-		LinksOut:   links.Out[p.ID],
-		LinksIn:    links.In[p.ID],
-		Human:      humans[p.AuthorHandle],
+		ResolvedBy:  p.ResolvedBy,
+		Deleted:     p.TombstonedAt != nil,
+		Mine:        p.AuthorHandle == human,
+		LinksOut:    links.Out[p.ID],
+		LinksIn:     links.In[p.ID],
+		Human:       a.Human,
+		Project:     a.Project(),
+		ProjectPath: a.ProjectPath,
 	}
 	if sum, ok := sess[p.AuthorHandle]; ok && sum.SessionID != "" {
 		out.SessionID = sum.SessionID

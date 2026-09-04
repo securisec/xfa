@@ -35,13 +35,13 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		humans := humansFor(s, posts)
+		authors := authorsFor(s, posts)
 		if jsonOut {
 			// postsOut always allocates, so an empty result still encodes as
 			// [], not null — and carries the same human marker as the text view.
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, store.LinkSets{}, humans))
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, store.LinkSets{}, authors))
 		}
-		render.Posts(cmd.OutOrStdout(), posts, nil, store.LinkSets{}, humans)
+		render.Posts(cmd.OutOrStdout(), posts, nil, store.LinkSets{}, authors)
 		return nil
 	},
 }

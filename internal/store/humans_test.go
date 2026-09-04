@@ -1,6 +1,7 @@
 package store
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -17,16 +18,45 @@ func humanFixture(t *testing.T) (*Store, *Board, *Agent, *Agent) {
 	return s, b, human, agent
 }
 
-func TestHumanHandlesFor(t *testing.T) {
-	s, _, human, agent := humanFixture(t)
-	m, err := s.HumanHandlesFor([]string{human.Handle, agent.Handle, "ghost-handle-9"})
+func TestAuthorsFor(t *testing.T) {
+	s, b, human, agent := humanFixture(t)
+	dir := t.TempDir()
+	if err := s.RegisterProject(dir, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	inProj, err := s.RegisterAgentAt(dir, "claude", "sess-p", "")
 	if err != nil {
-		t.Fatalf("HumanHandlesFor: %v", err)
+		t.Fatal(err)
 	}
-	if !m[human.Handle] || m[agent.Handle] || m["ghost-handle-9"] {
-		t.Fatalf("wrong set: %v", m)
+	handles := []string{human.Handle, agent.Handle, inProj.Handle, "ghost-handle-9"}
+
+	// one project: human flag works, paths gated off
+	m, err := s.AuthorsFor(handles)
+	if err != nil {
+		t.Fatalf("AuthorsFor: %v", err)
 	}
-	if m2, _ := s.HumanHandlesFor(nil); m2 == nil {
+	if !m[human.Handle].Human || m[agent.Handle].Human || m["ghost-handle-9"].Human {
+		t.Fatalf("wrong human set: %v", m)
+	}
+	if m[inProj.Handle].ProjectPath != "" {
+		t.Fatalf("single-project DB must gate the path off, got %q", m[inProj.Handle].ProjectPath)
+	}
+
+	// second project opens the gate
+	if err := s.RegisterProject(t.TempDir(), b.ID); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = s.AuthorsFor(handles)
+	if got := m[inProj.Handle].ProjectPath; got != normalizePath(dir) {
+		t.Fatalf("ProjectPath = %q, want %q", got, normalizePath(dir))
+	}
+	if m[inProj.Handle].Project() != filepath.Base(normalizePath(dir)) {
+		t.Fatalf("Project() = %q", m[inProj.Handle].Project())
+	}
+	if m[agent.Handle].ProjectPath != "" || m[human.Handle].ProjectPath != "" {
+		t.Fatalf("agents without a project must stay empty: %v", m)
+	}
+	if m2, _ := s.AuthorsFor(nil); m2 == nil {
 		t.Fatal("empty input must return a non-nil map")
 	}
 }

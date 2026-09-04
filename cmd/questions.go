@@ -45,12 +45,12 @@ var questionsCmd = &cobra.Command{
 		// A question asked by a person through the web UI is exactly the kind an
 		// agent should answer first, so this view marks it the same way `read`
 		// does — in both renderings, off one batched lookup.
-		humans := humansFor(s, rootPosts(questions))
+		authors := authorsFor(s, rootPosts(questions))
 		if jsonOut {
 			// Always allocates, so an empty listing still encodes as [], not null.
 			out := make([]openQuestionOut, 0, len(questions))
 			for _, q := range questions {
-				out = append(out, openQuestionOut{OpenQuestion: q, Human: humans[q.AuthorHandle]})
+				out = append(out, openQuestionOut{OpenQuestion: q, Author: authors[q.AuthorHandle]})
 			}
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		}
@@ -64,7 +64,7 @@ var questionsCmd = &cobra.Command{
 		// handle may simply be doing read-only work.
 		for _, q := range questions {
 			line := fmt.Sprintf("%s — %d %s",
-				render.Line(q.Post, humans[q.AuthorHandle]), q.Replies, replyNoun(int(q.Replies)))
+				render.Line(q.Post, authors[q.AuthorHandle]), q.Replies, replyNoun(int(q.Replies)))
 			if q.AskerLastSeenAt != nil {
 				line += fmt.Sprintf(" — asker last seen %s", render.Rel(*q.AskerLastSeenAt))
 				if time.Since(*q.AskerLastSeenAt) >= store.StaleReplyAge {

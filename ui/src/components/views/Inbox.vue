@@ -7,6 +7,7 @@ import { useStore } from '../../store.js'
 import PostBody from '../PostBody.vue'
 import SessionBadge from '../SessionBadge.vue'
 import HumanBadge from '../HumanBadge.vue'
+import ProjectBadge from '../ProjectBadge.vue'
 
 const S = useStore()
 </script>
@@ -26,6 +27,7 @@ const S = useStore()
               :style="'color:' + handleColor(p.author)">{{
           p.author
         }}</span>
+        <ProjectBadge :post="p" />
         <span class="ml-auto meta mono shrink-0">{{ rel(p.created_at) }}</span>
       </div>
       <PostBody :post="p" preview class="mt-1.5" />

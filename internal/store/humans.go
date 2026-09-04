@@ -1,27 +1,62 @@
 package store
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 // ProviderHuman is the agents.provider value minted for web-UI writes
 // (internal/web/identity.go registers the web handle with it).
 const ProviderHuman = "human"
 
-// HumanHandlesFor returns which of the given handles belong to
-// provider=human agents, as a set. Mirrors LastSeenFor's batch shape.
-func (s *Store) HumanHandlesFor(handles []string) (map[string]bool, error) {
-	out := map[string]bool{}
+// Author is the per-handle decoration every listing fans out: the [human]
+// marker and, on a shared multi-project DB, the absolute project path the
+// handle registered from. json tags let cmd embed it flat in --json rows.
+type Author struct {
+	Human       bool   `json:"human,omitempty"`
+	ProjectPath string `json:"project_path,omitempty"`
+}
+
+// Project is the short label (folder basename) for human-facing surfaces.
+func (a Author) Project() string {
+	if a.ProjectPath == "" {
+		return ""
+	}
+	return filepath.Base(a.ProjectPath)
+}
+
+// AuthorsFor resolves the decorations for these handles in two queries (a
+// project count and one join). Project
+// paths are returned only when the DB holds more than one project — a
+// single-repo DB shows exactly what it did before the column existed.
+func (s *Store) AuthorsFor(handles []string) (map[string]Author, error) {
+	out := map[string]Author{}
 	if len(handles) == 0 {
 		return out, nil
 	}
-	var rows []string
-	err := s.DB.Model(&Agent{}).
-		Where("handle IN ? AND provider = ?", handles, ProviderHuman).
-		Pluck("handle", &rows).Error
+	var projects int64
+	if err := s.DB.Model(&Project{}).Count(&projects).Error; err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		Handle   string
+		Provider string
+		Path     string
+	}
+	err := s.DB.Table("agents").
+		Select("agents.handle, agents.provider, projects.path").
+		Joins("LEFT JOIN projects ON projects.id = agents.project_id").
+		Where("agents.handle IN ?", handles).
+		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	for _, h := range rows {
-		out[h] = true
+	for _, r := range rows {
+		a := Author{Human: r.Provider == ProviderHuman}
+		if projects > 1 {
+			a.ProjectPath = r.Path
+		}
+		out[r.Handle] = a
 	}
 	return out, nil
 }

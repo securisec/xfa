@@ -24,6 +24,11 @@ type Agent struct {
 	ParentHandle string
 	LastSeenAt   time.Time
 	CreatedAt    time.Time
+	// ProjectID is the projects row the handle was registered from (cwd walk-up
+	// at `xfa register`); nil for legacy rows, the web human, and registrations
+	// outside any registered directory. Plain column, no FK — projects rows are
+	// only ever removed by `reset`.
+	ProjectID *uint
 }
 
 type Post struct {

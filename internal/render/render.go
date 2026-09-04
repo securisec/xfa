@@ -135,12 +135,14 @@ func StripControls(s string) string {
 	return b.String()
 }
 
-// Line renders "#id [human] [tag ✓] author (rel): body" on one line.
-// human marks provider=human authors (the web UI); callers that don't
-// have provider data pass false and lose only the marker.
-func Line(p store.Post, human bool) string {
+// Line renders "#id [human] [tag ✓] author [project] (rel): body" on one line.
+// a decorates the author: Human marks provider=human authors (the web UI) and
+// ProjectPath, set only on a multi-project DB, says which project the handle
+// registered from. Callers without author data pass store.Author{} and lose
+// only the decorations.
+func Line(p store.Post, a store.Author) string {
 	humanPart := ""
-	if human {
+	if a.Human {
 		humanPart = "[human] "
 	}
 	tagPart := ""
@@ -152,8 +154,13 @@ func Line(p store.Post, human bool) string {
 	case p.ResolvedAt != nil:
 		tagPart = "[✓] " // untagged posts resolve too (human posts) — the mark must survive without a tag
 	}
+	projPart := ""
+	if a.ProjectPath != "" {
+		// A folder name is human-controlled input: same single-line guarantee as the body.
+		projPart = " [" + bodySanitizer.Replace(StripControls(a.ProjectPath)) + "]"
+	}
 	body := bodySanitizer.Replace(StripControls(p.Body))
-	return fmt.Sprintf("#%d %s%s%s (%s): %s", p.ID, humanPart, tagPart, p.AuthorHandle, Rel(p.CreatedAt), body)
+	return fmt.Sprintf("#%d %s%s%s%s (%s): %s", p.ID, humanPart, tagPart, p.AuthorHandle, projPart, Rel(p.CreatedAt), body)
 }
 
 // Posts prints one Line per post at its indent, followed by that post's
@@ -165,13 +172,13 @@ func Line(p store.Post, human bool) string {
 // (search, inbox, board) pass store.LinkSets{} and get the undecorated output
 // they always had.
 //
-// humans is the set of provider=human author handles (store.HumanHandlesFor);
-// indexing a nil map yields false, so a caller without provider data passes nil
-// and loses only the [human] markers.
-func Posts(w io.Writer, posts []store.Post, indent map[uint]int, links store.LinkSets, humans map[string]bool) {
+// authors maps author handle -> decoration (store.AuthorsFor); indexing a nil
+// map yields the zero Author, so a caller without author data passes nil and
+// loses only the [human] markers and project labels.
+func Posts(w io.Writer, posts []store.Post, indent map[uint]int, links store.LinkSets, authors map[string]store.Author) {
 	for _, p := range posts {
 		pad := strings.Repeat("  ", indent[p.ID])
-		line := Line(p, humans[p.AuthorHandle])
+		line := Line(p, authors[p.AuthorHandle])
 		if indent == nil && p.ParentID != nil {
 			// Flat listings (inbox, search, read) have no indentation to say
 			// "this is a reply"; without this an agent can't tell which id to

@@ -127,7 +127,7 @@ type Model struct {
 	viewport   viewport.Model
 	detailRoot uint
 	links      store.LinkSets
-	humans     map[string]bool
+	authors    map[string]store.Author
 
 	err error
 }
@@ -317,7 +317,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// board-wide, not just the open thread: the thread-LIST rows call
 		// postHeader too, so every author on the loaded board needs a badge
 		// answer, not only the currently open one.
-		m.humans = m.humansFor(allPosts)
+		m.authors = m.authorsFor(allPosts)
 		if !sameScope {
 			// a different board (or session filter) must not inherit the
 			// previous scroll state: a stale offset past a shorter list would
@@ -505,15 +505,15 @@ func (m Model) linksFor(posts []store.Post) store.LinkSets {
 	return ls
 }
 
-// humansFor returns which of the given posts' authors are provider=human
-// agents, fail-soft: a store error must never block rendering, so it
-// degrades to no badges rather than surfacing m.err.
-func (m Model) humansFor(posts []store.Post) map[string]bool {
-	h, err := m.store.HumanHandlesFor(store.HandleSet(posts))
+// authorsFor returns the per-handle decorations ([human] badge, project
+// label) for the given posts' authors, fail-soft: a store error must never
+// block rendering, so it degrades to no decorations rather than m.err.
+func (m Model) authorsFor(posts []store.Post) map[string]store.Author {
+	a, err := m.store.AuthorsFor(store.HandleSet(posts))
 	if err != nil {
-		return map[string]bool{}
+		return map[string]store.Author{}
 	}
-	return h
+	return a
 }
 
 // contentHeight is the rows left for content once the chrome is drawn.
@@ -542,18 +542,23 @@ func firstLine(body string) string {
 	return body
 }
 
-// postHeader renders "#id [human] [tag] author · rel" — the shared prefix of
-// list rows and detail post headers. The [human] badge marks posts authored
-// by provider=human agents (i.e. the web UI).
-func postHeader(p store.Post, human bool) string {
+// postHeader renders "#id [human] [tag] author [project] · rel" — the shared
+// prefix of list rows and detail post headers. The [human] badge marks posts
+// authored by provider=human agents (i.e. the web UI); the trailing label is
+// the author's project BASENAME (this UI is human-only, the path is noise)
+// and is absent entirely on a single-project DB.
+func postHeader(p store.Post, a store.Author) string {
 	parts := []string{dimStyle.Render(fmt.Sprintf("#%d", p.ID))}
-	if human {
+	if a.Human {
 		parts = append(parts, humanBadgeStyle.Render("[human]"))
 	}
 	if badge := tagBadge(p.Tag, p.ResolvedAt != nil); badge != "" {
 		parts = append(parts, badge)
 	}
 	parts = append(parts, authorStyle(p.AuthorHandle).Render(p.AuthorHandle))
+	if label := a.Project(); label != "" {
+		parts = append(parts, dimStyle.Render("["+firstLine(label)+"]"))
+	}
 	return strings.Join(parts, " ")
 }
 
@@ -583,7 +588,7 @@ func (m Model) threadContent(posts []store.Post) string {
 			b.WriteString("\n")
 		}
 		indent := strings.Repeat("  ", depths[p.ID])
-		hdr := fmt.Sprintf("%s%s %s", indent, postHeader(p, m.humans[p.AuthorHandle]), dimStyle.Render(render.Rel(p.CreatedAt)))
+		hdr := fmt.Sprintf("%s%s %s", indent, postHeader(p, m.authors[p.AuthorHandle]), dimStyle.Render(render.Rel(p.CreatedAt)))
 		b.WriteString(m.fit(hdr) + "\n")
 		// control-stripped, but real newlines and tabs survive: the viewport
 		// is the ONE place multi-line bodies render raw
@@ -625,7 +630,7 @@ func (m Model) threadRow(t store.ThreadSummary, selected bool) string {
 	}
 	meta := dimStyle.Render(fmt.Sprintf("· %d %s · active %s",
 		t.Replies, plural(t.Replies, "reply"), render.Rel(t.LastActivity)))
-	head := fmt.Sprintf("%s%s ", marker, postHeader(t.Root, m.humans[t.Root.AuthorHandle]))
+	head := fmt.Sprintf("%s%s ", marker, postHeader(t.Root, m.authors[t.Root.AuthorHandle]))
 	// one assembler, so the layout and the width budget below cannot drift
 	row := func(body string) string { return head + body + " " + meta }
 	if m.width <= 0 { // no WindowSizeMsg yet: nothing to fit to

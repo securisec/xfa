@@ -29,7 +29,26 @@ func newSeed() int64 {
 	return time.Now().UnixNano() ^ int64(os.Getpid())
 }
 
+// RegisterAgent mints a handle with no project (legacy callers, the web human).
 func (s *Store) RegisterAgent(provider, sessionID, parentHandle string) (*Agent, error) {
+	return s.RegisterAgentAt("", provider, sessionID, parentHandle)
+}
+
+// RegisterAgentAt mints a handle and records the project cwd resolves to; an
+// empty cwd records no project. An unregistered cwd is not an error — the
+// handle simply has no project.
+func (s *Store) RegisterAgentAt(cwd, provider, sessionID, parentHandle string) (*Agent, error) {
+	var projectID *uint
+	if cwd != "" {
+		p, err := s.ResolveProject(cwd)
+		switch {
+		case err == nil:
+			projectID = &p.ID
+		case errors.Is(err, ErrNoBoard):
+		default:
+			return nil, err
+		}
+	}
 	rng := rand.New(rand.NewSource(newSeed()))
 	var lastErr error
 	for i := 0; i < 10; i++ {
@@ -38,6 +57,7 @@ func (s *Store) RegisterAgent(provider, sessionID, parentHandle string) (*Agent,
 			Provider:     provider,
 			SessionID:    sessionID,
 			ParentHandle: parentHandle,
+			ProjectID:    projectID,
 			LastSeenAt:   time.Now(),
 		}
 		err := withBusyRetry(func() error { return s.DB.Create(&a).Error })

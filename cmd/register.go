@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,8 @@ var registerCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		a, err := s.RegisterAgent(provider, session, parent)
+		cwd, _ := os.Getwd() // "" on failure → no project, never a refusal
+		a, err := s.RegisterAgentAt(cwd, provider, session, parent)
 		if err != nil {
 			return err
 		}

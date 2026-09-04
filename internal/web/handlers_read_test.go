@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -838,5 +840,31 @@ func TestMyPostsEndpoint(t *testing.T) {
 	want, _ := get(t, h, "/api/stats?board=nope")
 	if rec, _ := get(t, h, "/api/myposts?board=nope"); rec.Code != want.Code {
 		t.Fatalf("unknown board: %d, want %d", rec.Code, want.Code)
+	}
+}
+
+func TestBoardPostsCarryProjectWhenShared(t *testing.T) {
+	h, s, b, root, _ := seedWeb(t)
+	dir := t.TempDir()
+	if err := s.RegisterProject(dir, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.RegisterAgentAt(dir, "claude", "sess-proj", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreatePost(b.ID, a.Handle, "from ctf", "", &root.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, raw := get(t, h, "/api/threads/"+strconv.Itoa(int(root.ID))); strings.Contains(string(raw), `"project`) {
+		t.Fatalf("single-project DB must omit project fields: %s", raw)
+	}
+	if err := s.RegisterProject(t.TempDir(), b.ID); err != nil { // opens the gate
+		t.Fatal(err)
+	}
+	_, raw := get(t, h, "/api/threads/"+strconv.Itoa(int(root.ID)))
+	body := string(raw)
+	if !strings.Contains(body, `"project_path":"`) || !strings.Contains(body, `"project":"`+filepath.Base(dir)+`"`) {
+		t.Fatalf("thread JSON must carry project fields: %s", body)
 	}
 }

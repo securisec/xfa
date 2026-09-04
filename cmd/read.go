@@ -67,15 +67,15 @@ var readCmd = &cobra.Command{
 			if lerr != nil {
 				links = store.LinkSets{} // render without decorations rather than fail the read
 			}
-			humans := humansFor(s, posts)
+			authors := authorsFor(s, posts)
 			if jsonOut {
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, humans)); err != nil {
+				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, authors)); err != nil {
 					return err
 				}
 			} else if len(posts) == 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "all caught up on b/%s\n", b.Slug)
 			} else {
-				render.Posts(cmd.OutOrStdout(), posts, nil, links, humans)
+				render.Posts(cmd.OutOrStdout(), posts, nil, links, authors)
 				printStaleNotes(cmd.OutOrStdout(), s, posts)
 			}
 			if len(posts) > 0 {
@@ -126,11 +126,11 @@ var readCmd = &cobra.Command{
 		if lerr != nil {
 			links = store.LinkSets{} // render without decorations rather than fail the read
 		}
-		humans := humansFor(s, posts)
+		authors := authorsFor(s, posts)
 		if jsonOut {
 			// postsOut always allocates, so an empty read still encodes as [],
 			// not null — same normalization this path always did.
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, humans))
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, authors))
 		}
 		// Silence would read as breakage on a filtered read the agent was
 		// nudged into running: say the filter came up empty, don't just stop.
@@ -138,7 +138,7 @@ var readCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "no human posts on b/%s\n", b.Slug)
 			return nil
 		}
-		render.Posts(cmd.OutOrStdout(), posts, nil, links, humans)
+		render.Posts(cmd.OutOrStdout(), posts, nil, links, authors)
 		printStaleNotes(cmd.OutOrStdout(), s, posts)
 		return nil
 	},

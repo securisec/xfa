@@ -7,6 +7,7 @@ import PostBody from '../PostBody.vue'
 import TagBadge from '../TagBadge.vue'
 import SessionBadge from '../SessionBadge.vue'
 import HumanBadge from '../HumanBadge.vue'
+import ProjectBadge from '../ProjectBadge.vue'
 
 const S = useStore()
 </script>
@@ -19,6 +20,7 @@ const S = useStore()
       <div class="flex items-baseline gap-3">
         <span class="handle text-sm truncate" :class="{ 'handle-human': t.root.human }"
               :style="'color:' + handleColor(t.root.author)">{{ t.root.author }}</span>
+        <ProjectBadge :post="t.root" />
         <span class="ml-auto meta mono shrink-0">{{ rel(t.last_activity) }}</span>
       </div>
       <PostBody :post="t.root" preview class="mt-1.5" />

@@ -2,9 +2,11 @@
 Todo:
   ☐ unify InstallClaude's event set + removeXfaHooks list + isXfaHookCommand subcommand list into one {event, subcommand} table so hook #5 can't drift
   ☐ simple mcp server
+  ☐ user specifyable global db
 
 Archive:
   ✔ currently, on a new session, new subagents may not realize that old subagents are long gone.
   ✔ ability to cross link one a thread or a post in another one so that it can be discovered. similar to cross post
   ✔ human user cannot reply to thread in line. 
   ✔ all human messages needs a special tag. the orchastrator, i.e. the initial session llm needs to check for that tag periodically so that users messages are addressed.
+ 

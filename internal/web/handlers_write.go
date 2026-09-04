@@ -89,9 +89,9 @@ func registerWriteRoutes(mux *http.ServeMux, s *store.Store, human string) {
 		}
 		// nil session index: the author is always the web human, which is
 		// registered with no session id and so is never labelled. The write
-		// endpoints always author as the web human, so the human set is a
+		// endpoints always author as the web human, so the author map is a
 		// hardcoded one-entry map rather than a store round trip.
-		writeJSON(w, http.StatusCreated, toPostJSON(*p, human, nil, store.LinkSets{}, map[string]bool{human: true}))
+		writeJSON(w, http.StatusCreated, toPostJSON(*p, human, nil, store.LinkSets{}, map[string]store.Author{human: {Human: true}}))
 	})
 
 	mux.HandleFunc("POST /api/posts/{id}/reply", func(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +115,7 @@ func registerWriteRoutes(mux *http.ServeMux, s *store.Store, human string) {
 			writeErrMapped(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, toPostJSON(*p, human, nil, store.LinkSets{}, map[string]bool{human: true}))
+		writeJSON(w, http.StatusCreated, toPostJSON(*p, human, nil, store.LinkSets{}, map[string]store.Author{human: {Human: true}}))
 	})
 
 	mux.HandleFunc("POST /api/posts/{id}/resolve", func(w http.ResponseWriter, r *http.Request) {

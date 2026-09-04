@@ -86,20 +86,14 @@ func (s *Store) RegisterProject(absPath string, boardID uint) error {
 	}).Create(&p).Error
 }
 
-func (s *Store) ResolveBoard(cwd string) (*Board, error) {
+// ResolveProject walks up from cwd to the nearest registered project directory.
+func (s *Store) ResolveProject(cwd string) (*Project, error) {
 	dir := normalizePath(cwd)
 	for {
 		var p Project
 		err := s.DB.Where("path = ?", dir).First(&p).Error
 		if err == nil {
-			var b Board
-			if err := s.DB.First(&b, p.BoardID).Error; err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					return nil, fmt.Errorf("%w: project registered but board %d missing", ErrNoBoard, p.BoardID)
-				}
-				return nil, err
-			}
-			return &b, nil
+			return &p, nil
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
@@ -110,6 +104,21 @@ func (s *Store) ResolveBoard(cwd string) (*Board, error) {
 		}
 		dir = parent
 	}
+}
+
+func (s *Store) ResolveBoard(cwd string) (*Board, error) {
+	p, err := s.ResolveProject(cwd)
+	if err != nil {
+		return nil, err
+	}
+	var b Board
+	if err := s.DB.First(&b, p.BoardID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: project registered but board %d missing", ErrNoBoard, p.BoardID)
+		}
+		return nil, err
+	}
+	return &b, nil
 }
 
 func (s *Store) ListBoards() ([]Board, error) {

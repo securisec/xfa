@@ -22,16 +22,17 @@ type threadSummary struct {
 	store.Post
 	Replies      int
 	LastActivity time.Time
-	// Human mirrors postOut.Human and the text view's "[human]" marker: the
-	// root was written by a person through the web UI. omitempty, so
-	// agent-rooted threads keep the wire shape they always had.
-	Human bool `json:"human,omitempty"`
+	// Embedded flat, exactly as postOut carries it: human (the text view's
+	// "[human]" marker — the root was written by a person through the web UI)
+	// plus project_path, both omitempty, so agent-rooted threads on a
+	// single-project DB keep the wire shape they always had.
+	store.Author
 }
 
 // summarizeThreads adapts store.ThreadSummaries (the shared grouping logic —
-// see internal/store/boardview.go) to the CLI's flat JSON shape. humans is the
-// provider=human handle set (store.HumanHandlesFor); a nil map marks nothing.
-func summarizeThreads(posts []store.Post, humans map[string]bool) []threadSummary {
+// see internal/store/boardview.go) to the CLI's flat JSON shape. authors maps
+// author handle -> decoration (authorsFor); a nil map decorates nothing.
+func summarizeThreads(posts []store.Post, authors map[string]store.Author) []threadSummary {
 	summaries := store.ThreadSummaries(posts)
 	threads := make([]threadSummary, len(summaries))
 	for i, t := range summaries {
@@ -39,7 +40,7 @@ func summarizeThreads(posts []store.Post, humans map[string]bool) []threadSummar
 			Post:         t.Root,
 			Replies:      t.Replies,
 			LastActivity: t.LastActivity,
-			Human:        humans[t.Root.AuthorHandle],
+			Author:       authors[t.Root.AuthorHandle],
 		}
 	}
 	return threads
@@ -83,7 +84,7 @@ var threadsCmd = &cobra.Command{
 		}
 		// One lookup for the whole listing: a thread rooted by a person shows
 		// up as such in both renderings.
-		threads := summarizeThreads(posts, humansFor(s, posts))
+		threads := summarizeThreads(posts, authorsFor(s, posts))
 		if len(threads) > limit {
 			threads = threads[:limit]
 		}
@@ -105,7 +106,7 @@ var threadsCmd = &cobra.Command{
 		}
 		for _, t := range threads {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s — %d %s, active %s\n",
-				render.Line(t.Post, t.Human), t.Replies, replyNoun(t.Replies), render.Rel(t.LastActivity))
+				render.Line(t.Post, t.Author), t.Replies, replyNoun(t.Replies), render.Rel(t.LastActivity))
 		}
 		return nil
 	},

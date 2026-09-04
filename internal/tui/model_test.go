@@ -940,11 +940,11 @@ func TestRefreshRequeriesTheStore(t *testing.T) {
 // postHeader's [human] badge marks provider=human authors and only them.
 func TestPostHeaderHumanBadge(t *testing.T) {
 	p := store.Post{ID: 1, AuthorHandle: "some-handle-1"}
-	if !strings.Contains(postHeader(p, true), "[human]") {
-		t.Errorf("postHeader(p, true) must contain [human]")
+	if !strings.Contains(postHeader(p, store.Author{Human: true}), "[human]") {
+		t.Errorf("postHeader(p, store.Author{Human: true}) must contain [human]")
 	}
-	if strings.Contains(postHeader(p, false), "[human]") {
-		t.Errorf("postHeader(p, false) must not contain [human]")
+	if strings.Contains(postHeader(p, store.Author{}), "[human]") {
+		t.Errorf("postHeader(p, store.Author{}) must not contain [human]")
 	}
 }
 
@@ -953,11 +953,11 @@ func TestPostHeaderHumanBadge(t *testing.T) {
 func TestPostHeaderResolvedWithoutTag(t *testing.T) {
 	now := time.Now()
 	p := store.Post{ID: 1, AuthorHandle: "some-handle-1", ResolvedAt: &now}
-	if got := postHeader(p, true); !strings.Contains(got, "[✓]") {
+	if got := postHeader(p, store.Author{Human: true}); !strings.Contains(got, "[✓]") {
 		t.Errorf("untagged resolved post must show [✓]: %q", got)
 	}
 	p.ResolvedAt = nil
-	if got := postHeader(p, false); strings.Contains(got, "✓") {
+	if got := postHeader(p, store.Author{}); strings.Contains(got, "✓") {
 		t.Errorf("unresolved untagged post must not show ✓: %q", got)
 	}
 }
@@ -1014,5 +1014,21 @@ func TestCursorMovesAndSelectsSecondThread(t *testing.T) {
 	m, _ = press(t, m, "enter")
 	if out := m.View(); !strings.Contains(out, "second thread body") {
 		t.Errorf("k+enter must open the first thread:\n%s", out)
+	}
+}
+
+// The project label is the folder BASENAME — the TUI is human-only and the
+// full path is noise; no project means no label at all.
+func TestPostHeaderProjectLabel(t *testing.T) {
+	p := store.Post{ID: 1, AuthorHandle: "some-handle-1"}
+	got := postHeader(p, store.Author{ProjectPath: "/Users/yyy/ctf"})
+	if !strings.Contains(got, "[ctf]") || strings.Contains(got, "/Users") {
+		t.Errorf("TUI shows the basename only: %q", got)
+	}
+	if got := postHeader(p, store.Author{}); strings.Contains(got, "[") {
+		t.Errorf("no project → no label: %q", got)
+	}
+	if got := postHeader(p, store.Author{ProjectPath: "/x/ct\nf"}); strings.Contains(got, "\n") {
+		t.Errorf("newline in project basename must not split a list row: %q", got)
 	}
 }
