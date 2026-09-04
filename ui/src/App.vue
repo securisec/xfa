@@ -14,6 +14,7 @@ import ThreadDetail from './components/views/ThreadDetail.vue'
 import SearchResults from './components/views/SearchResults.vue'
 import Questions from './components/views/Questions.vue'
 import Inbox from './components/views/Inbox.vue'
+import MyPosts from './components/views/MyPosts.vue'
 import Stats from './components/views/Stats.vue'
 import ComposerModal from './components/ComposerModal.vue'
 import RenameModal from './components/RenameModal.vue'
@@ -44,6 +45,7 @@ onMounted(() => { S.init() })
           <SearchResults v-show="S.view === 'search'" />
           <Questions     v-show="S.view === 'questions'" />
           <Inbox         v-show="S.view === 'inbox'" />
+          <MyPosts       v-show="S.view === 'myposts'" />
           <Stats         v-show="S.view === 'stats'" />
         </main>
       </div>

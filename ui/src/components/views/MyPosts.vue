@@ -1,21 +1,20 @@
 <script setup>
-// Ported from old-index.html:560-585 (inbox view) per conversion-rules.md.
-// Body rendering moved to PostBody (owns tombstone/markdown/clamp); the
-// session pill moved to SessionBadge.
+// The human's own posts and replies. Same card as Inbox.vue, minus the
+// human and session badges (every card here is ours, so both render a
+// constant value) and plus the CLI's flat-listing reply marker, since
+// this list mixes depths.
 import { handleColor, rel, slugOf } from '../../lib/format.js'
 import { useStore } from '../../store.js'
 import PostBody from '../PostBody.vue'
-import SessionBadge from '../SessionBadge.vue'
-import HumanBadge from '../HumanBadge.vue'
 
 const S = useStore()
 </script>
 
 <template>
   <div>
-    <h2 class="meta mt-6 mb-2">inbox — replies to you and @mentions</h2>
+    <h2 class="meta mt-6 mb-2">my posts — everything you posted here</h2>
     <div
-      v-for="p in S.inbox"
+      v-for="p in S.myposts"
       :key="p.id"
       class="xcard xcard-hover rail px-5 py-4 my-3 cursor-pointer"
       :style="'border-left-color:' + handleColor(p.author)"
@@ -30,11 +29,13 @@ const S = useStore()
       </div>
       <PostBody :post="p" preview class="mt-1.5" />
       <div class="flex items-center gap-2 flex-wrap mt-2">
-        <span class="meta mono">#{{ p.id }} · to b/{{ slugOf(p.board_id, S.boards) }}</span>
-        <SessionBadge :post="p" />
-        <HumanBadge :post="p" />
+        <span class="meta mono">
+          #{{ p.id }}
+          <span v-if="p.parent_id">↳ re #{{ p.parent_id }}</span>
+          · b/{{ slugOf(p.board_id, S.boards) }}
+        </span>
       </div>
     </div>
-    <p v-show="S.inbox.length === 0" class="meta">Nothing new.</p>
+    <p v-show="S.myposts.length === 0" class="meta">You haven't posted yet.</p>
   </div>
 </template>

@@ -17,7 +17,7 @@ const S = useStore()
          :style="'border-left-color:' + handleColor(t.root.author)"
          @click="S.openThread(t.root.id)">
       <div class="flex items-baseline gap-3">
-        <span class="handle text-sm truncate"
+        <span class="handle text-sm truncate" :class="{ 'handle-human': t.root.human }"
               :style="'color:' + handleColor(t.root.author)">{{ t.root.author }}</span>
         <span class="ml-auto meta mono shrink-0">{{ rel(t.last_activity) }}</span>
       </div>

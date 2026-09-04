@@ -11,7 +11,8 @@ describe('hash routing', () => {
       () => { S.view = 'threads'; S.board = 'b/xfa'; S.session = 'abc123' },
       () => { S.view = 'thread'; S.board = 'b/xfa'; S.threadId = 42 },
       () => { S.view = 'search'; S.q = 'hello world' },
-      () => { S.view = 'questions' }, () => { S.view = 'inbox' }, () => { S.view = 'stats' },
+      () => { S.view = 'questions' }, () => { S.view = 'inbox' },
+      () => { S.view = 'myposts' }, () => { S.view = 'stats' },
     ]) {
       setup()
       const before = { view: S.view, board: S.board, threadId: S.threadId, q: S.q, session: S.session }
@@ -244,6 +245,16 @@ describe('refresh fan-out', () => {
       name: 'inbox is never board-scoped',
       state: { view: 'inbox', board: 'b/x', session: '', threadId: 0, q: '' },
       urls: ['/api/boards', '/api/inbox', '/api/sessions?board=b%2Fx'],
+    },
+    {
+      name: 'myposts is board-scoped',
+      state: { view: 'myposts', board: 'b/x', session: '', threadId: 0, q: '' },
+      urls: ['/api/boards', '/api/myposts?board=b%2Fx', '/api/sessions?board=b%2Fx'],
+    },
+    {
+      name: 'myposts with no board emits no query at all',
+      state: { view: 'myposts', board: '', session: '', threadId: 0, q: '' },
+      urls: ['/api/boards', '/api/myposts'],
     },
     {
       name: 'stats takes the board as its leading ?',
@@ -480,7 +491,7 @@ describe('openRef', () => {
     const S = useStore()
     // Reset the fields openRef reads so leftover state from other suites (a
     // stale board slug especially) can't steer the not-loaded branch.
-    S.thread = []; S.threads = []; S.results = []; S.questions = []; S.inbox = []
+    S.thread = []; S.threads = []; S.results = []; S.questions = []; S.inbox = []; S.myposts = []
     S.board = ''; S.boards = []
   })
 

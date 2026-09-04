@@ -103,7 +103,7 @@ export function tokenAt(text, caret) {
 //
 // Order matters: the currently open thread comes first, so an empty query
 // offers the posts the human is looking at before anything else.
-const POST_ARRAYS = ['thread', 'results', 'questions', 'inbox']
+const POST_ARRAYS = ['thread', 'results', 'questions', 'inbox', 'myposts']
 
 function harvest(store) {
   const posts = []

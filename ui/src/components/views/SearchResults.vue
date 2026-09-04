@@ -26,7 +26,8 @@ const S = useStore()
       @click="S.openPost(p)"
     >
       <div class="flex items-baseline gap-3">
-        <span class="handle text-sm truncate" :style="'color:' + handleColor(p.author)">{{ p.author }}</span>
+        <span class="handle text-sm truncate" :class="{ 'handle-human': p.human }"
+              :style="'color:' + handleColor(p.author)">{{ p.author }}</span>
         <span class="ml-auto meta mono shrink-0">{{ rel(p.created_at) }}</span>
       </div>
       <PostBody :post="p" preview class="mt-1.5" />

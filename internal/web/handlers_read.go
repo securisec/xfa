@@ -384,6 +384,28 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, humans))
 	})
 
+	// The human's own posts and replies, board-scoped like /api/stats:
+	// the selected board, or every board on the all-boards overview.
+	mux.HandleFunc("GET /api/myposts", func(w http.ResponseWriter, r *http.Request) {
+		boardID, err := boardIDByQuery(s, r)
+		if err != nil {
+			readErr(w, err)
+			return
+		}
+		posts, err := s.PostsByAuthor(boardID, human, limitFromQuery(r))
+		if err != nil {
+			readErr(w, err)
+			return
+		}
+		sess, err := s.SessionsByHandle()
+		if err != nil {
+			readErr(w, err)
+			return
+		}
+		humans := humanHandlesForPosts(s, posts)
+		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, humans))
+	})
+
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {
 		boardID, err := boardIDByQuery(s, r)
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -224,6 +225,7 @@ func TestEmptyListsSerializeAsArrays(t *testing.T) {
 		"/api/search?q=nothingmatchesthis",
 		"/api/questions",
 		"/api/inbox",
+		"/api/myposts",
 	} {
 		rec, body := get(t, h, path)
 		if rec.Code != 200 {
@@ -270,6 +272,7 @@ func TestReadEndpointsDoNotMoveCursors(t *testing.T) {
 		"/api/search?q=frobnicate",
 		"/api/questions",
 		"/api/inbox",
+		"/api/myposts",
 		"/api/stats",
 	} {
 		if rec, body := get(t, h, path); rec.Code != 200 {
@@ -783,5 +786,57 @@ func TestPostsMarkHumanAuthor(t *testing.T) {
 	}
 	if len(posts) != 1 || posts[0].Human {
 		t.Errorf("agent thread detail marked human: %s", body)
+	}
+}
+
+func TestMyPostsEndpoint(t *testing.T) {
+	s := openTemp(t)
+	b, err := s.EnsureBoard("general", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.EnsureBoard("other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	human, err := s.RegisterAgent(store.ProviderHuman, "web", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := s.RegisterAgent("claude", "sess-1", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, _ := s.CreatePost(b.ID, human.Handle, "mine here", "", nil)
+	elsewhere, _ := s.CreatePost(other.ID, human.Handle, "mine there", "", nil)
+	_, _ = s.CreatePost(b.ID, agent.Handle, "not mine", "", nil)
+	h := NewHandler(s, human.Handle, b.Slug)
+
+	ids := func(path string) []uint {
+		t.Helper()
+		rec, body := get(t, h, path)
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d %s", path, rec.Code, body)
+		}
+		var posts []postJSON
+		if err := json.Unmarshal(body, &posts); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		out := []uint{}
+		for _, p := range posts {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+	if got := ids("/api/myposts"); !reflect.DeepEqual(got, []uint{elsewhere.ID, mine.ID}) {
+		t.Fatalf("all boards: %v", got)
+	}
+	if got := ids("/api/myposts?board=" + b.Slug); !reflect.DeepEqual(got, []uint{mine.ID}) {
+		t.Fatalf("board-scoped: %v", got)
+	}
+	// Unknown board behaves like /api/stats?board=nope.
+	want, _ := get(t, h, "/api/stats?board=nope")
+	if rec, _ := get(t, h, "/api/myposts?board=nope"); rec.Code != want.Code {
+		t.Fatalf("unknown board: %d, want %d", rec.Code, want.Code)
 	}
 }

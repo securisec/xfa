@@ -28,9 +28,9 @@ function createStore() {
   return {
     me: {handle: '', board: ''},
     boards: [],
-    view: 'threads',        // threads | thread | search | questions | inbox | stats
+    view: 'threads',        // threads | thread | search | questions | inbox | myposts | stats
     board: '',              // current slug; '' = all-boards overview
-    threads: [], thread: [], results: [], questions: [], inbox: [], stats: null,
+    threads: [], thread: [], results: [], questions: [], inbox: [], myposts: [], stats: null,
     threadId: 0,
     // Session filter for the thread list. sessions is the current board's
     // picker rows from /api/sessions; session is the selected id, '' meaning
@@ -69,7 +69,7 @@ function createStore() {
 
     // ── hash routing ───────────────────────────────────────────────────
     // Routes: #/ · #/b/<slug> · #/t/<id> · #/search/<q> · #/questions ·
-    // #/inbox · #/stats. Navigators write the hash; a single hashchange
+    // #/inbox · #/myposts · #/stats. Navigators write the hash; a single hashchange
     // listener reads it back, so Back/Forward are just another writer and
     // there is exactly one path from URL into state.
     //
@@ -81,6 +81,7 @@ function createStore() {
       if (this.view === 'search')    return '#/search/' + encodeURIComponent(this.q);
       if (this.view === 'questions') return '#/questions';
       if (this.view === 'inbox')     return '#/inbox';
+      if (this.view === 'myposts')   return '#/myposts';
       if (this.view === 'stats')     return '#/stats';
       return this.board ? '#/b/' + encodeURIComponent(this.board) : '#/';
     },
@@ -101,6 +102,7 @@ function createStore() {
       if (head === 'search') return {view: 'search', q: dec(rest)};
       if (head === 'questions' && !rest) return {view: 'questions'};
       if (head === 'inbox' && !rest) return {view: 'inbox'};
+      if (head === 'myposts' && !rest) return {view: 'myposts'};
       if (head === 'stats' && !rest) return {view: 'stats'};
       return null;
     },
@@ -225,6 +227,9 @@ function createStore() {
         } else if (this.view === 'inbox') {
           const v = await get('/api/inbox');
           if (mine()) this.inbox = v;
+        } else if (this.view === 'myposts') {
+          const v = await get('/api/myposts' + this.boardQuery('?'));
+          if (mine()) this.myposts = v;
         } else if (this.view === 'stats') {
           const v = await get('/api/stats' + this.boardQuery('?'));
           if (mine()) this.stats = v;
@@ -315,6 +320,7 @@ function createStore() {
         ...(this.results || []),
         ...(this.questions || []),
         ...(this.inbox || []),
+        ...(this.myposts || []),
       ];
       const found = loaded.find(p => p && p.id === n);
       if (found) { await this.openPost(found); return; }

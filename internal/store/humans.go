@@ -82,3 +82,19 @@ func (s *Store) UnaddressedHumanCount(boardID uint) (int64, error) {
 		  )`, boardID, ProviderHuman, ProviderHuman).Scan(&n).Error
 	return n, err
 }
+
+// PostsByAuthor lists one handle's own posts and replies, newest first.
+// boardID 0 means all boards (Stats' convention). Tombstoned posts are kept
+// and masked — the author's own deletions still belong in their own list.
+func (s *Store) PostsByAuthor(boardID uint, handle string, limit int) ([]Post, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	q := s.DB.Model(&Post{}).Where("author_handle = ?", handle)
+	if boardID != 0 {
+		q = q.Where("board_id = ?", boardID)
+	}
+	var posts []Post
+	err := q.Order("id DESC").Limit(limit).Find(&posts).Error
+	return maskTombstones(posts), err
+}

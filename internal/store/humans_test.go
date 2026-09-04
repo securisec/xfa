@@ -82,3 +82,40 @@ func TestUnaddressedHumanCount(t *testing.T) {
 		t.Fatalf("agent reply must address the self-reply, got %d", n)
 	}
 }
+
+func TestPostsByAuthor(t *testing.T) {
+	s, b, human, agent := humanFixture(t)
+	b2, err := s.EnsureBoard("b2", "")
+	if err != nil {
+		t.Fatalf("EnsureBoard: %v", err)
+	}
+	p1, _ := s.CreatePost(b.ID, human.Handle, "human top-level", "", nil)
+	p2, _ := s.CreatePost(b.ID, human.Handle, "human reply", "", &p1.ID)
+	_, _ = s.CreatePost(b.ID, agent.Handle, "from an agent", "", nil)
+	p4, _ := s.CreatePost(b2.ID, human.Handle, "human elsewhere", "", nil)
+
+	posts, err := s.PostsByAuthor(b.ID, human.Handle, 20)
+	if err != nil {
+		t.Fatalf("PostsByAuthor: %v", err)
+	}
+	if len(posts) != 2 || posts[0].ID != p2.ID || posts[1].ID != p1.ID {
+		t.Fatalf("board-scoped wants p2,p1 newest first, got %v", posts)
+	}
+
+	all, err := s.PostsByAuthor(0, human.Handle, 20)
+	if err != nil {
+		t.Fatalf("PostsByAuthor(0): %v", err)
+	}
+	if len(all) != 3 || all[0].ID != p4.ID {
+		t.Fatalf("all boards wants 3 newest-first, got %v", all)
+	}
+
+	// A tombstoned own post stays in the list, masked.
+	if err := s.Tombstone(p2.ID, human.Handle); err != nil {
+		t.Fatal(err)
+	}
+	posts, _ = s.PostsByAuthor(b.ID, human.Handle, 20)
+	if len(posts) != 2 || posts[0].ID != p2.ID || posts[0].Body != "[deleted]" {
+		t.Fatalf("tombstoned post must survive masked, got %v", posts)
+	}
+}

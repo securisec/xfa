@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { tokenAt, candidates, applyCompletion, MAX_CANDIDATES } from './autocomplete.js'
 
 // A store-shaped literal is enough: candidates() only reads the loaded arrays
-// (threads / thread / results / questions / inbox), never the reactive
+// (threads / thread / results / questions / inbox / myposts), never the reactive
 // machinery, so the pure tests never need useStore().
 function storeOf(over = {}) {
   return {
-    threads: [], thread: [], results: [], questions: [], inbox: [],
+    threads: [], thread: [], results: [], questions: [], inbox: [], myposts: [],
     threadId: 0,
     ...over,
   }
@@ -149,6 +149,7 @@ describe('candidates', () => {
     results: [post(30, 'azure-lynx-3', 'a search hit')],
     questions: [post(40, 'violet-moth-9', 'a question')],
     inbox: [post(50, 'gold-badger-1', 'an inbox reply')],
+    myposts: [post(60, 'web-human-2', 'one of my own posts')],
   })
 
   it('returns handle candidates for a handle query', () => {
@@ -165,6 +166,12 @@ describe('candidates', () => {
     expect(out.map((c) => c.label)).toEqual(['#21', '#20'])
     expect(out[0].insert).toBe('#21 ')
     expect(out[0].detail).toBe('another list root')
+  })
+
+  it('harvests the myposts view like every other loaded list', () => {
+    const out = candidates(S, '60', 'post')
+    expect(out.map((c) => c.label)).toEqual(['#60'])
+    expect(out[0].detail).toBe('one of my own posts')
   })
 
   // The kind comes from the sigil, so a numeric query behind '@' stays in the

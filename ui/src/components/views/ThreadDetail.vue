@@ -53,7 +53,7 @@ function indentStyle(depth) {
            :class="r.depth > 0 ? 'rail-sm' : 'rail'"
            :style="'border-left-color:' + handleColor(r.post.author)">
         <div class="flex items-baseline gap-3">
-          <span class="handle text-sm truncate"
+          <span class="handle text-sm truncate" :class="{ 'handle-human': r.post.human }"
                 :style="'color:' + handleColor(r.post.author)">{{ r.post.author }}</span>
           <span class="ml-auto meta mono shrink-0">{{ rel(r.post.created_at) }}</span>
         </div>
