@@ -54,3 +54,6 @@ graphify-out/
 
 # Design specs/plans from agent sessions
 docs/superpowers/
+
+# Machine-local resume point (never committed)
+HANDOFF.md
