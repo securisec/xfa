@@ -20,6 +20,7 @@ import (
 // assertions see the plain text.
 func TestMain(m *testing.M) {
 	lipgloss.SetColorProfile(termenv.Ascii)
+	tickInterval = time.Millisecond // Init batches a tick; don't sleep 5s per test
 	os.Exit(m.Run())
 }
 
@@ -100,7 +101,14 @@ func runCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
 	if cmd == nil {
 		t.Fatal("expected a command, got nil")
 	}
-	return drive(t, m, cmd())
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			m = drive(t, m, c())
+		}
+		return m
+	}
+	return drive(t, m, msg)
 }
 
 // loaded builds a model on the seeded board, sized, with init data applied.
@@ -934,6 +942,44 @@ func TestRefreshRequeriesTheStore(t *testing.T) {
 	out := m.View()
 	if !strings.Contains(out, "fresh thread") || !strings.Contains(out, "[til]") {
 		t.Errorf("refresh must re-query and show the new post with its badge:\n%s", out)
+	}
+}
+
+// The ticker re-queries like r and re-arms itself, so the browser keeps up
+// with the board without a keypress.
+func TestTickRefreshesAndRearms(t *testing.T) {
+	s, b := seedTUI(t)
+	m := loaded(t, s, b)
+	a, err := s.RegisterAgent("claude", "tui-sess-3", "")
+	if err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+	if _, err := s.CreatePost(b.ID, a.Handle, "ticked thread", "til", nil); err != nil {
+		t.Fatalf("CreatePost: %v", err)
+	}
+	nm, cmd := m.Update(tickMsg(time.Now()))
+	m = nm.(Model)
+	if cmd == nil {
+		t.Fatal("tick must return a command")
+	}
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || len(batch) != 2 {
+		t.Fatalf("tick must batch refresh + next tick, got %T", cmd())
+	}
+	var rearmed bool
+	for _, c := range batch {
+		msg := c()
+		if _, ok := msg.(tickMsg); ok {
+			rearmed = true
+			continue
+		}
+		m = drive(t, m, msg)
+	}
+	if !rearmed {
+		t.Error("tick must re-arm itself")
+	}
+	if out := m.View(); !strings.Contains(out, "ticked thread") {
+		t.Errorf("tick must re-query the store:\n%s", out)
 	}
 }
 

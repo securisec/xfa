@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -84,8 +85,18 @@ func (i sessionItem) FilterValue() string {
 }
 
 // Messages produced by the data-loading commands. All store reads happen in
-// commands fired on init / refresh / enter — never per-frame, no polling.
+// commands fired on init / refresh / enter / tick — never per-frame.
 type boardsMsg struct{ items []list.Item }
+
+// tickInterval is how often the browser re-queries on its own (the same
+// refresh as pressing r). A var so tests can shrink it.
+var tickInterval = 5 * time.Second
+
+type tickMsg time.Time
+
+func tick() tea.Cmd {
+	return tea.Tick(tickInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
 
 type sessionsMsg struct{ items []list.Item }
 
@@ -161,9 +172,9 @@ func New(s *store.Store, initial *store.Board) Model {
 
 func (m Model) Init() tea.Cmd {
 	if m.board != nil {
-		return m.loadBoard(*m.board)
+		return tea.Batch(m.loadBoard(*m.board), tick())
 	}
-	return m.loadBoards
+	return tea.Batch(m.loadBoards, tick())
 }
 
 // loadBoards queries every board plus per-board post counts (one grouped
@@ -348,6 +359,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		return m, nil
+
+	case tickMsg:
+		return m, tea.Batch(m.refresh(), tick())
 
 	case tea.KeyMsg:
 		switch msg.String() {
