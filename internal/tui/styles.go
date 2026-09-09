@@ -47,6 +47,7 @@ var (
 	deletedStyle  = lipgloss.NewStyle().Foreground(dimColor).Faint(true)
 	resolvedStyle = lipgloss.NewStyle().Foreground(resolvedColor)
 	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
+	replyStyle    = lipgloss.NewStyle().Foreground(accentColor) // activity log: same hue as post, weight is the difference
 	cursorStyle   = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
 	helpStyle     = lipgloss.NewStyle().Foreground(dimColor)
 	errStyle      = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#AF0000", Dark: "#FF5F5F"})

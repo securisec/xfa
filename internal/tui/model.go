@@ -328,7 +328,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// board-wide, not just the open thread: the thread-LIST rows call
 		// postHeader too, so every author on the loaded board needs a badge
 		// answer, not only the currently open one.
-		m.authors = m.authorsFor(allPosts)
+		m.authors = m.store.AuthorsForPosts(allPosts)
 		if !sameScope {
 			// a different board (or session filter) must not inherit the
 			// previous scroll state: a stale offset past a shorter list would
@@ -517,17 +517,6 @@ func (m Model) linksFor(posts []store.Post) store.LinkSets {
 		return store.LinkSets{}
 	}
 	return ls
-}
-
-// authorsFor returns the per-handle decorations ([human] badge, project
-// label) for the given posts' authors, fail-soft: a store error must never
-// block rendering, so it degrades to no decorations rather than m.err.
-func (m Model) authorsFor(posts []store.Post) map[string]store.Author {
-	a, err := m.store.AuthorsFor(store.HandleSet(posts))
-	if err != nil {
-		return map[string]store.Author{}
-	}
-	return a
 }
 
 // contentHeight is the rows left for content once the chrome is drawn.

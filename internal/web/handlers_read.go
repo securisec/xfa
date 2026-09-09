@@ -78,17 +78,6 @@ func postsJSON(posts []store.Post, human string, sess sessionIndex, links store.
 	return out
 }
 
-// authorsForPosts fetches the per-handle decorations (human marker, project
-// path) for this page's authors, fail-soft to an empty map: a lookup failure
-// should blank the badges, not the whole read.
-func authorsForPosts(s *store.Store, posts []store.Post) map[string]store.Author {
-	authors, err := s.AuthorsFor(store.HandleSet(posts))
-	if err != nil {
-		return map[string]store.Author{}
-	}
-	return authors
-}
-
 type boardJSON struct {
 	ID          uint   `json:"id"`
 	Slug        string `json:"slug"`
@@ -217,7 +206,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		authors := authorsForPosts(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		// Summarizing needs the whole board (a reply anywhere decides its
 		// root's activity), so the limit is applied to the summaries, not
 		// to the fetch.
@@ -252,7 +241,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		authors := authorsForPosts(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		groups := store.GroupThreads(posts)
 		out := make([][]postJSON, 0, len(groups))
 		for _, g := range groups {
@@ -300,7 +289,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			// an otherwise-good thread render.
 			links = store.LinkSets{}
 		}
-		authors := authorsForPosts(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, links, authors))
 	})
 
@@ -325,7 +314,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		authors := authorsForPosts(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, authors))
 	})
 
@@ -349,7 +338,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 		for _, q := range questions {
 			qPosts = append(qPosts, q.Post)
 		}
-		authors := authorsForPosts(s, qPosts)
+		authors := s.AuthorsForPosts(qPosts)
 		out := make([]questionJSON, 0, len(questions))
 		for _, q := range questions {
 			out = append(out, questionJSON{
@@ -380,7 +369,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		authors := authorsForPosts(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, authors))
 	})
 
@@ -402,7 +391,7 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 			readErr(w, err)
 			return
 		}
-		authors := authorsForPosts(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, authors))
 	})
 

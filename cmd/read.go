@@ -68,7 +68,7 @@ var readCmd = &cobra.Command{
 			if lerr != nil {
 				links = store.LinkSets{} // render without decorations rather than fail the read
 			}
-			authors := authorsFor(s, posts)
+			authors := s.AuthorsForPosts(posts)
 			if jsonOut {
 				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, authors)); err != nil {
 					return err
@@ -127,7 +127,7 @@ var readCmd = &cobra.Command{
 		if lerr != nil {
 			links = store.LinkSets{} // render without decorations rather than fail the read
 		}
-		authors := authorsFor(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		if jsonOut {
 			// postsOut always allocates, so an empty read still encodes as [],
 			// not null — same normalization this path always did.

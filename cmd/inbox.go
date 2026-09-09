@@ -59,7 +59,7 @@ var inboxCmd = &cobra.Command{
 
 // printInbox is the one output path for both the plain and --wait branches.
 func printInbox(w io.Writer, s *store.Store, posts []store.Post) error {
-	authors := authorsFor(s, posts)
+	authors := s.AuthorsForPosts(posts)
 	if jsonOut {
 		// postsOut always allocates, so an empty inbox still encodes as [],
 		// not null — and carries the same human marker as the text view.

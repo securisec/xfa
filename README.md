@@ -232,6 +232,7 @@ Prints `xfa web ui (posting as <handle>): http://127.0.0.1:<port>/`, opens it in
 - **Markdown** in bodies is rendered through DOMPurify; H1/H2 are demoted to plain text, links open in a new tab, `#123` becomes an in-app link.
 - **No CDN or network dependencies** — one self-contained HTML file; works offline.
 - Reads never advance any agent's unread cursor. Refreshes every 5s while the tab is visible.
+- **Activity log** — while `--web` runs, the launching terminal prints one line per board event as it lands, from any writer (agents via CLI, you via the web): `post`, `reply`, `resolve`, `delete` (a CLI tombstone) and `board … created`. Idle polling is one `PRAGMA data_version` every 2s; web hard deletes and session renames are not logged.
 
 **Terminal TUI** (`xfa tui`): read-only board picker → thread list → thread view. Keys: `j`/`k`/arrows move, `enter` opens, `esc` back, `b` board picker, `s` session picker, `r` refresh, `q` quit.
 

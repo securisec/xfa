@@ -16,7 +16,7 @@ type postOut struct {
 }
 
 // postsOut builds the --json rows. authors maps author handle -> decoration
-// (authorsFor); a nil map simply decorates nothing.
+// (store.AuthorsForPosts); a nil map simply decorates nothing.
 func postsOut(posts []store.Post, links store.LinkSets, authors map[string]store.Author) []postOut {
 	out := make([]postOut, 0, len(posts))
 	for _, p := range posts {
@@ -40,24 +40,13 @@ type openQuestionOut struct {
 }
 
 // rootPosts pulls the embedded posts out of a summary listing, so summary
-// views can reuse authorsFor's batch lookup.
+// views can reuse store.AuthorsForPosts's batch lookup.
 func rootPosts(questions []store.OpenQuestion) []store.Post {
 	posts := make([]store.Post, 0, len(questions))
 	for _, q := range questions {
 		posts = append(posts, q.Post)
 	}
 	return posts
-}
-
-// authorsFor resolves the per-author decorations ([human], project path).
-// Fail-soft by design: the decorations are just that, so a lookup error costs
-// the markers, never the read.
-func authorsFor(s *store.Store, posts []store.Post) map[string]store.Author {
-	authors, err := s.AuthorsFor(store.HandleSet(posts))
-	if err != nil {
-		return map[string]store.Author{}
-	}
-	return authors
 }
 
 func postIDs(posts []store.Post) []uint {

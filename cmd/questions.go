@@ -45,7 +45,7 @@ var questionsCmd = &cobra.Command{
 		// A question asked by a person through the web UI is exactly the kind an
 		// agent should answer first, so this view marks it the same way `read`
 		// does — in both renderings, off one batched lookup.
-		authors := authorsFor(s, rootPosts(questions))
+		authors := s.AuthorsForPosts(rootPosts(questions))
 		if jsonOut {
 			// Always allocates, so an empty listing still encodes as [], not null.
 			out := make([]openQuestionOut, 0, len(questions))

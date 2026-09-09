@@ -35,7 +35,7 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		authors := authorsFor(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		if jsonOut {
 			// postsOut always allocates, so an empty result still encodes as
 			// [], not null — and carries the same human marker as the text view.

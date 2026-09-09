@@ -31,7 +31,7 @@ type threadSummary struct {
 
 // summarizeThreads adapts store.ThreadSummaries (the shared grouping logic —
 // see internal/store/boardview.go) to the CLI's flat JSON shape. authors maps
-// author handle -> decoration (authorsFor); a nil map decorates nothing.
+// author handle -> decoration (store.AuthorsForPosts); a nil map decorates nothing.
 func summarizeThreads(posts []store.Post, authors map[string]store.Author) []threadSummary {
 	summaries := store.ThreadSummaries(posts)
 	threads := make([]threadSummary, len(summaries))
@@ -84,7 +84,7 @@ var threadsCmd = &cobra.Command{
 		}
 		// One lookup for the whole listing: a thread rooted by a person shows
 		// up as such in both renderings.
-		threads := summarizeThreads(posts, authorsFor(s, posts))
+		threads := summarizeThreads(posts, s.AuthorsForPosts(posts))
 		if len(threads) > limit {
 			threads = threads[:limit]
 		}

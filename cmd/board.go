@@ -55,7 +55,7 @@ var boardCmd = &cobra.Command{
 		}
 		w := cmd.OutOrStdout()
 		// One lookup for the whole board, reused by every thread below.
-		authors := authorsFor(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		for i, thread := range store.GroupThreads(posts) {
 			if i > 0 {
 				fmt.Fprintln(w) // one blank line between threads

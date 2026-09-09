@@ -39,7 +39,7 @@ var threadCmd = &cobra.Command{
 		if lerr != nil {
 			links = store.LinkSets{} // render without decorations rather than fail the read
 		}
-		authors := authorsFor(s, posts)
+		authors := s.AuthorsForPosts(posts)
 		if jsonOut {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(postsOut(posts, links, authors))
 		}

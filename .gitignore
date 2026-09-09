@@ -1,4 +1,5 @@
 docs/
+.serena/
 
 # Built binary
 /xfa

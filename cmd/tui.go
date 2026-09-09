@@ -76,6 +76,15 @@ var tuiCmd = &cobra.Command{
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			// Activity log on the launching terminal. Its own second store:
+			// one connection per Store, and PRAGMA data_version only sees
+			// commits from OTHER connections — sharing s would blind the
+			// poller to the web handlers' own writes. Any failure = no log.
+			if ws, err := openStore(); err == nil {
+				if a, err := tui.NewActivity(ws, cmd.OutOrStdout()); err == nil {
+					go a.Run(ctx)
+				}
+			}
 			return serveWebUI(ctx, s, web.Options{
 				Port: port, InitialBoard: slug, OpenBrowser: true, Out: cmd.OutOrStdout(),
 			})

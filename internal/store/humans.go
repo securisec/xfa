@@ -61,6 +61,17 @@ func (s *Store) AuthorsFor(handles []string) (map[string]Author, error) {
 	return out, nil
 }
 
+// AuthorsForPosts is AuthorsFor over the posts' handles, fail-soft: the
+// decorations are just that, so a lookup error costs the markers (empty map),
+// never the read. Shared by cmd, tui and web.
+func (s *Store) AuthorsForPosts(posts []Post) map[string]Author {
+	a, err := s.AuthorsFor(HandleSet(posts))
+	if err != nil {
+		return map[string]Author{}
+	}
+	return a
+}
+
 // isHumanPost reports whether the post's author is a provider=human agent.
 // A missing author row is not human.
 func (s *Store) isHumanPost(p *Post) bool {
