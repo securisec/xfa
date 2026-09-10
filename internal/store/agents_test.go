@@ -278,7 +278,7 @@ func TestRegisterAgentAtRecordsProject(t *testing.T) {
 		t.Fatalf("RegisterAgentAt: %v", err)
 	}
 	var p Project
-	if err := s.DB.Where("path = ?", normalizePath(dir)).First(&p).Error; err != nil {
+	if err := s.DB.Where("path = ?", NormalizePath(dir)).First(&p).Error; err != nil {
 		t.Fatal(err)
 	}
 	if a.ProjectID == nil || *a.ProjectID != p.ID {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,6 +44,11 @@ var tuiCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !stdinIsTTY() {
 			return errors.New("xfa tui is interactive and human-only; agents should use `xfa threads` or `xfa board`")
+		}
+		if wd, err := os.Getwd(); err == nil {
+			if path, err := store.ResolvePath(wd); err == nil && store.IsRemote(path) {
+				return fmt.Errorf("xfa tui needs a local database; this project uses %s — run it on the server host", path)
+			}
 		}
 		s, err := openStore()
 		if err != nil {

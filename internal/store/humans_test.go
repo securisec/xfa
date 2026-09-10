@@ -47,10 +47,10 @@ func TestAuthorsFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ = s.AuthorsFor(handles)
-	if got := m[inProj.Handle].ProjectPath; got != normalizePath(dir) {
-		t.Fatalf("ProjectPath = %q, want %q", got, normalizePath(dir))
+	if got := m[inProj.Handle].ProjectPath; got != NormalizePath(dir) {
+		t.Fatalf("ProjectPath = %q, want %q", got, NormalizePath(dir))
 	}
-	if m[inProj.Handle].Project() != filepath.Base(normalizePath(dir)) {
+	if m[inProj.Handle].Project() != filepath.Base(NormalizePath(dir)) {
 		t.Fatalf("Project() = %q", m[inProj.Handle].Project())
 	}
 	if m[agent.Handle].ProjectPath != "" || m[human.Handle].ProjectPath != "" {

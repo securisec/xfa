@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/securisec/xfa/internal/install"
+	"github.com/securisec/xfa/internal/remote"
 	"github.com/securisec/xfa/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -50,15 +51,48 @@ var initCmd = &cobra.Command{
 		// anything is written.
 		global, _ := cmd.Flags().GetBool("global")
 		db, _ := cmd.Flags().GetString("db")
+		server, _ := cmd.Flags().GetString("server")
 		if global && db != "" {
 			return fmt.Errorf("--global and --db are mutually exclusive")
+		}
+		if server != "" && (global || db != "") {
+			return fmt.Errorf("--server is mutually exclusive with --db and --global")
 		}
 		// --db pins this project to a specific database via the .xfa.json
 		// marker. Write it BEFORE opening the store so the board/project
 		// registration from this very init lands in the custom DB. Re-init
 		// without --db leaves an existing marker alone (resolution below
 		// still picks it up).
-		if db != "" {
+		rollbackMarker := func() {} // set by the --server arm only
+		if server != "" {
+			// --server pins the project to a remote xfa server: same marker,
+			// a URL instead of a path. Nothing local is created or opened.
+			if !store.IsRemote(server) {
+				return fmt.Errorf("--server %s must be an http(s) URL without credentials", server)
+			}
+			if env := os.Getenv("XFA_DB"); env != "" && env != server {
+				return fmt.Errorf("XFA_DB=%s is set and would shadow the server pin; unset it first", env)
+			}
+			if fi, err := os.Lstat(filepath.Join(cwd, store.LocalDirName)); err == nil && fi.IsDir() {
+				return fmt.Errorf("this project has a local %s/ database; move or remove it before pinning to a server", store.LocalDirName)
+			}
+			// Snapshot the marker so a failed registration leaves the OLD pin
+			// in place (a re-pin that fails must not strand the project on
+			// the URL that just refused it), or no marker if there was none.
+			markerPath := filepath.Join(cwd, store.MarkerName)
+			prev, prevErr := os.ReadFile(markerPath)
+			if err := store.WriteMarker(cwd, server); err != nil {
+				return err
+			}
+			rollbackMarker = func() {
+				if prevErr == nil {
+					os.WriteFile(markerPath, prev, 0o644)
+				} else {
+					os.Remove(markerPath)
+				}
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "pinned server %s (%s)\n", server, store.MarkerName)
+		} else if db != "" {
 			abs, err := filepath.Abs(db)
 			if err != nil {
 				return err
@@ -107,30 +141,36 @@ var initCmd = &cobra.Command{
 				fmt.Fprintf(cmd.OutOrStdout(), "created %s/ — project database %s\n", store.LocalDirName, filepath.Join(store.LocalDirName, "board.db"))
 			}
 		}
-		s, err := openStore()
+		resolved, err := store.ResolvePath(cwd)
 		if err != nil {
 			return err
 		}
-		// Collision check: same slug bound to a different project path.
-		// Match RegisterProject's stored form (symlinks resolved) so a
-		// re-init of the same directory is not a false collision.
-		// Explicit --board is intent to share; the guard only protects derived slugs.
-		if !explicit {
-			cwdKey := projectKey(cwd)
-			var existing store.Project
-			err = s.DB.Joins("JOIN boards ON boards.id = projects.board_id").
-				Where("boards.slug = ? AND projects.path <> ?", slug, cwdKey).
-				First(&existing).Error
-			if err == nil {
-				return fmt.Errorf("board b/%s is already bound to %s — pass --board <other-slug>, or --board %s to share it", slug, existing.Path, slug)
+		boardSlug := slug
+		if store.IsRemote(resolved) {
+			// Remote branch, entered by RESOLUTION (flag, committed marker, or
+			// XFA_DB=<url> alike): registration runs on the server; nothing
+			// local is opened.
+			resp, ferr := remote.Forward(resolved, "project-register",
+				remote.Request{Args: []string{"--board", slug}, Cwd: cwd}, forwardTimeout)
+			if ferr == nil && resp.Code != 0 {
+				ferr = fmt.Errorf("%s", strings.TrimSpace(strings.TrimPrefix(resp.Stderr, "Error: ")))
 			}
-		}
-		b, err := s.EnsureBoard(slug, "project board for "+cwd)
-		if err != nil {
-			return err
-		}
-		if err := s.RegisterProject(cwd, b.ID); err != nil {
-			return err
+			if ferr != nil {
+				rollbackMarker()
+				return ferr
+			}
+		} else {
+			s, err := openStore()
+			if err != nil {
+				return err
+			}
+			// Explicit --board is intent to share; the collision guard only
+			// protects derived slugs.
+			b, err := bindProject(s, cwd, slug, !explicit)
+			if err != nil {
+				return err
+			}
+			boardSlug = b.Slug
 		}
 		exe, err := os.Executable()
 		if err != nil {
@@ -143,19 +183,9 @@ var initCmd = &cobra.Command{
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "installed provider: %s\n", p.Name())
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "board b/%s ready. Agents in this directory will discover it at session start.\n", b.Slug)
+		fmt.Fprintf(cmd.OutOrStdout(), "board b/%s ready. Agents in this directory will discover it at session start.\n", boardSlug)
 		return nil
 	},
-}
-
-// projectKey normalizes a directory the way RegisterProject stores it
-// (cleaned, symlinks resolved), so lookups match rows written by init.
-func projectKey(dir string) string {
-	key := filepath.Clean(dir)
-	if r, err := filepath.EvalSymlinks(key); err == nil {
-		key = r
-	}
-	return key
 }
 
 // warnPreviousGlobalRegistration tells the user that going local forks a
@@ -177,7 +207,7 @@ func warnPreviousGlobalRegistration(cmd *cobra.Command, cwd string) {
 		}
 	}()
 	var p store.Project
-	if err := s.DB.Where("path = ?", projectKey(cwd)).First(&p).Error; err != nil {
+	if err := s.DB.Where("path = ?", store.NormalizePath(cwd)).First(&p).Error; err != nil {
 		return
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "note: this project was previously registered in the global database (%s); its board history stays there. Pass --global to keep using it.\n", globalPath)
@@ -193,6 +223,7 @@ func init() {
 	initCmd.Flags().StringSlice("provider", []string{"claude"}, "providers to set up ("+strings.Join(install.Names(), ", ")+")")
 	initCmd.Flags().String("board", "", "board slug (default: slugified directory name)")
 	initCmd.Flags().String("db", "", "pin this project to a specific database file (writes "+store.MarkerName+")")
+	initCmd.Flags().String("server", "", "pin this project to a remote xfa server URL (writes "+store.MarkerName+")")
 	initCmd.Flags().Bool("global", false, "use the global XDG database instead of a project-local "+store.LocalDirName+"/ directory")
 
 	if err := initCmd.RegisterFlagCompletionFunc("provider", providerCompletion); err != nil {

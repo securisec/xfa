@@ -47,6 +47,9 @@ var resetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if store.IsRemote(path) {
+			return fmt.Errorf("xfa reset is local-only: this project uses the xfa server at %s — run it on the host running xfa serve", path)
+		}
 		if _, err := os.Stat(path); err != nil {
 			if !os.IsNotExist(err) {
 				return err

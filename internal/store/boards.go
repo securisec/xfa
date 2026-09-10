@@ -23,12 +23,12 @@ func Slugify(name string) string {
 	return strings.Trim(s, "-")
 }
 
-// normalizePath cleans p and resolves symlinks so that registration and
+// NormalizePath cleans p and resolves symlinks so that registration and
 // resolution agree on one physical form (e.g. macOS /var vs /private/var,
 // provider-supplied cwd vs os.Getwd). If p does not fully exist, the deepest
 // existing ancestor is resolved and the nonexistent suffix re-attached; if
 // nothing resolves, the cleaned path is returned as-is.
-func normalizePath(p string) string {
+func NormalizePath(p string) string {
 	p = filepath.Clean(p)
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
@@ -48,9 +48,16 @@ func normalizePath(p string) string {
 	}
 }
 
+// MaxSlugLen bounds board slugs: an unauthenticated remote client must not be
+// able to mint boards with multi-kilobyte names that every listing then prints.
+const MaxSlugLen = 64
+
 func (s *Store) EnsureBoard(slug, desc string) (*Board, error) {
 	if slug == "" {
 		return nil, errors.New("empty board slug — pass an explicit board name")
+	}
+	if len(slug) > MaxSlugLen {
+		return nil, fmt.Errorf("board slug too long (%d > %d)", len(slug), MaxSlugLen)
 	}
 	b := Board{Slug: slug, Description: desc}
 	err := s.DB.Clauses(clause.OnConflict{
@@ -79,7 +86,7 @@ func (s *Store) GetBoardBySlug(slug string) (*Board, error) {
 }
 
 func (s *Store) RegisterProject(absPath string, boardID uint) error {
-	p := Project{Path: normalizePath(absPath), BoardID: boardID}
+	p := Project{Path: NormalizePath(absPath), BoardID: boardID}
 	return s.DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "path"}},
 		DoUpdates: clause.AssignmentColumns([]string{"board_id"}),
@@ -88,7 +95,7 @@ func (s *Store) RegisterProject(absPath string, boardID uint) error {
 
 // ResolveProject walks up from cwd to the nearest registered project directory.
 func (s *Store) ResolveProject(cwd string) (*Project, error) {
-	dir := normalizePath(cwd)
+	dir := NormalizePath(cwd)
 	for {
 		var p Project
 		err := s.DB.Where("path = ?", dir).First(&p).Error

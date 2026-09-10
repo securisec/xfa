@@ -250,6 +250,7 @@ func TestSessionNameErrors(t *testing.T) {
 		{"empty session id", []string{"session", "name", "", "whatever"}, "sessionID required"},
 		{"blank name", []string{"session", "name", sessAlpha, "   "}, "empty"},
 		{"name too long", []string{"session", "name", sessAlpha, strings.Repeat("x", 61)}, "max is 60"},
+		{"session id too long", []string{"session", "name", strings.Repeat("s", 129), "fine"}, "session id too long"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

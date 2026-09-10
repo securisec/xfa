@@ -43,7 +43,15 @@ func Serve(ctx context.Context, s *store.Store, o Options) error {
 	if o.OpenBrowser {
 		openBrowser(url) // best-effort, errors ignored
 	}
-	srv := &http.Server{Handler: NewHandler(s, human, o.InitialBoard)}
+	return ServeUntil(ctx, ln, NewHandler(s, human, o.InitialBoard))
+}
+
+// ServeUntil serves h on ln until ctx is cancelled, then shuts down
+// gracefully with a 3s cap. Shared by the web UI and `xfa serve`. The read
+// timeouts are new for the web UI too (it had none): headers 5s, body 10s —
+// nothing the UI does approaches either.
+func ServeUntil(ctx context.Context, ln net.Listener, h http.Handler) error {
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {

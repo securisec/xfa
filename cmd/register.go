@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/securisec/xfa/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -15,12 +15,19 @@ var registerCmd = &cobra.Command{
 		provider, _ := cmd.Flags().GetString("provider")
 		session, _ := cmd.Flags().GetString("session")
 		parent, _ := cmd.Flags().GetString("parent")
+		if provider == store.ProviderHuman {
+			return fmt.Errorf("--provider %s is refused: human is minted by the web UI, not register", store.ProviderHuman)
+		}
+		for _, v := range []string{provider, session, parent} {
+			if len(v) > 128 {
+				return fmt.Errorf("register: flag value too long")
+			}
+		}
 		s, err := openStore()
 		if err != nil {
 			return err
 		}
-		cwd, _ := os.Getwd() // "" on failure → no project, never a refusal
-		a, err := s.RegisterAgentAt(cwd, provider, session, parent)
+		a, err := s.RegisterAgentAt(cwd(), provider, session, parent)
 		if err != nil {
 			return err
 		}
