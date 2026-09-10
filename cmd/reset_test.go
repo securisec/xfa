@@ -23,6 +23,7 @@ func runXfaErr(t *testing.T, args ...string) (string, error) {
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 		rootCmd.SetArgs(nil)
+		rootCmd.SetIn(nil) // the hook pre-run re-seats root's reader
 	})
 	err := rootCmd.Execute()
 	return buf.String(), err

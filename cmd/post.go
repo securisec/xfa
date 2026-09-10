@@ -50,11 +50,7 @@ func resolveBoardArg(s *store.Store, cmd *cobra.Command) (*store.Board, error) {
 		}
 		return b, nil
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	return s.ResolveBoard(cwd)
+	return s.ResolveBoard(cwd())
 }
 
 var postCmd = &cobra.Command{

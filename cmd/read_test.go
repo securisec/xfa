@@ -72,6 +72,7 @@ func runXfa(t *testing.T, args ...string) string {
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 		rootCmd.SetArgs(nil)
+		rootCmd.SetIn(nil) // the hook pre-run re-seats root's reader
 	})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("xfa %v: %v (output %q)", args, err, buf.String())

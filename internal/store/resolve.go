@@ -3,13 +3,16 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // MarkerName is the per-project database marker file, written by
 // `xfa init --db` at the project root. Content is a JSON object whose "db"
-// key holds the absolute path to the SQLite database for that project.
+// key holds either the absolute path to the SQLite database for that project
+// or the http(s) URL of the xfa server that owns it.
 const MarkerName = ".xfa.json"
 
 // markerDBKey is the marker's JSON key holding the database path.
@@ -43,9 +46,10 @@ func LocalDBPath(dir string) string {
 // working directory.
 //
 // A marker that exists but is corrupt (unreadable, not a JSON object, missing
-// a non-empty string "db", or holding a relative path) is a loud error naming
-// the marker file — as is a .xfa that exists but is not a directory. Never a
-// silent fall-through to the global database, which would fork board data.
+// a non-empty string "db", or holding a value that is neither an absolute
+// path nor an http(s) URL) is a loud error naming the marker file — as is a
+// .xfa that exists but is not a directory. Never a silent fall-through to the
+// global database, which would fork board data.
 func ResolvePath(cwd string) (string, error) {
 	if p := os.Getenv("XFA_DB"); p != "" {
 		return p, nil
@@ -97,10 +101,22 @@ func readMarkerDB(path string) (string, error) {
 	if db == "" {
 		return "", fmt.Errorf("xfa marker %s: missing or empty %q key", path, markerDBKey)
 	}
-	if !filepath.IsAbs(db) {
-		return "", fmt.Errorf("xfa marker %s: %q must be an absolute path, got %q", path, markerDBKey, db)
+	if !filepath.IsAbs(db) && !IsRemote(db) {
+		return "", fmt.Errorf("xfa marker %s: %q must be an absolute path or http(s) URL, got %q", path, markerDBKey, db)
 	}
 	return db, nil
+}
+
+// IsRemote reports whether p is an xfa server URL rather than a database
+// file. Only lowercase http/https are accepted, and never a URL carrying
+// userinfo — a secret in the URL would land in a committable marker and in
+// every error string.
+func IsRemote(p string) bool {
+	if !strings.HasPrefix(p, "http://") && !strings.HasPrefix(p, "https://") {
+		return false
+	}
+	u, err := url.Parse(p)
+	return err == nil && u.User == nil && u.Host != ""
 }
 
 // WriteMarker writes (or updates) dir/.xfa.json to pin the project to dbPath,

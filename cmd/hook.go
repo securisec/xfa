@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/securisec/xfa/internal/hookrun"
 	"github.com/spf13/cobra"
@@ -20,7 +19,7 @@ var hookCmd = &cobra.Command{
 		// everything below: hooks must never break an agent session.
 		if args[0] == "antigravity-invoke" || args[0] == "antigravity-stop" {
 			var ain hookrun.AntigravityInput
-			_ = json.NewDecoder(os.Stdin).Decode(&ain)
+			_ = json.NewDecoder(cmd.InOrStdin()).Decode(&ain)
 			if len(ain.WorkspacePaths) == 0 {
 				return nil
 			}
@@ -41,9 +40,9 @@ var hookCmd = &cobra.Command{
 		}
 		// Fail open: hooks must never break an agent session.
 		var in hookrun.Input
-		_ = json.NewDecoder(os.Stdin).Decode(&in)
+		_ = json.NewDecoder(cmd.InOrStdin()).Decode(&in)
 		if in.Cwd == "" {
-			in.Cwd, _ = os.Getwd()
+			in.Cwd = cwd()
 		}
 		// Resolve the DB from the payload's cwd — the same cwd the hookrun
 		// entrypoints resolve the board from — not the process cwd: providers

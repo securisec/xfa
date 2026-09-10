@@ -135,7 +135,7 @@ func projectRegistered(t *testing.T, dbPath, dir string) bool {
 			sqlDB.Close()
 		}
 	}()
-	key := projectKey(dir)
+	key := store.NormalizePath(dir)
 	var n int64
 	if err := s.DB.Model(&store.Project{}).Where("path = ?", key).Count(&n).Error; err != nil {
 		t.Fatalf("count projects: %v", err)

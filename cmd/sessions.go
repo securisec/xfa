@@ -90,6 +90,11 @@ var sessionNameCmd = &cobra.Command{
 	// running it again renames.
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// The id becomes a sessions row an unauthenticated remote client can
+		// mint; bound it like the hook payload's session id.
+		if len(args[0]) > 128 {
+			return fmt.Errorf("session id too long")
+		}
 		s, err := openStore()
 		if err != nil {
 			return err

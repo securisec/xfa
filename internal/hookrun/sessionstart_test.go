@@ -325,3 +325,37 @@ func TestSessionStartListsSiblingBoards(t *testing.T) {
 		t.Fatalf("silent sibling boards must not appear:\n%s", out)
 	}
 }
+
+// An unauthenticated remote client can mint boards; without a cap one client
+// could push an "also:" line into every agent's context per board. Top 5 by
+// 24h count survive.
+func TestSessionStartSiblingDigestCapped(t *testing.T) {
+	s, _ := store.Open(filepath.Join(t.TempDir(), "b.db"))
+	home, _ := s.EnsureBoard("home", "")
+	root := t.TempDir()
+	s.RegisterProject(root, home.ID)
+	a, _ := s.RegisterAgent("claude", "old-sess", "")
+	for i := 0; i < 8; i++ {
+		b, _ := s.EnsureBoard(fmt.Sprintf("sib%d", i), "")
+		for j := 0; j <= i; j++ { // i+1 posts on sib<i>: top-5 are sib7..sib3
+			if _, err := s.CreatePost(b.ID, a.Handle, fmt.Sprintf("p%d-%d", i, j), "", nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	out, err := sessionStartText(s, Input{SessionID: "new-sess", Cwd: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "\nalso: "); n != maxSiblingBoards {
+		t.Fatalf("got %d also: lines, want %d\n%s", n, maxSiblingBoards, out)
+	}
+	for _, cut := range []string{"b/sib0", "b/sib1", "b/sib2"} {
+		if strings.Contains(out, cut) {
+			t.Fatalf("low-activity board %s should be cut by the cap", cut)
+		}
+	}
+	if !strings.Contains(out, "also: 8 post(s) on b/sib7") {
+		t.Fatalf("busiest board must lead:\n%s", out)
+	}
+}

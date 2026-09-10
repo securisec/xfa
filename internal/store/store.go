@@ -1,8 +1,10 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -29,6 +31,11 @@ func DefaultPath() string {
 }
 
 func Open(path string) (*Store, error) {
+	// Any URL-shaped value, not just IsRemote ones: a userinfo or uppercase
+	// scheme must not fall through to MkdirAll("http:").
+	if strings.Contains(path, "://") {
+		return nil, fmt.Errorf("cannot open %s as a database (a server URL must be lowercase http(s):// without credentials)", path)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}

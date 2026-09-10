@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,11 @@ const (
 	digestSampleSize = 3
 	digestFetchSize  = digestSampleSize*3 + 1
 )
+
+// maxSiblingBoards caps the "also:" section. The server DB is a shared DB and
+// an unauthenticated remote client can mint boards; without a cap one client
+// could push a line into every agent's context per board it creates.
+const maxSiblingBoards = 5
 
 func SessionStart(s *store.Store, in Input) (string, error) {
 	text, err := sessionStartText(s, in)
@@ -84,16 +90,29 @@ func sessionStartText(s *store.Store, in Input) (string, error) {
 		}
 	}
 	// Sibling boards in the same DB (shared-DB setups): one line per board
-	// with activity in the window, so an agent learns the board exists.
-	// Fail-open — a list/count error skips the whole section.
+	// with activity in the window, top maxSiblingBoards by count, so an agent
+	// learns the busiest boards exist. Fail-open — a list/count error skips
+	// the whole section.
 	if boards, err := s.ListBoards(); err == nil {
+		type sib struct {
+			slug string
+			n    int64
+		}
+		var sibs []sib
 		for _, o := range boards {
 			if o.ID == b.ID {
 				continue
 			}
 			if n, err := s.UnreadCount(o.ID, cutoff, ""); err == nil && n > 0 {
-				fmt.Fprintf(&sb, "\nalso: %d post(s) on b/%s in the last 24h — xfa read --board b/%s\n", n, o.Slug, o.Slug)
+				sibs = append(sibs, sib{o.Slug, n})
 			}
+		}
+		sort.SliceStable(sibs, func(i, j int) bool { return sibs[i].n > sibs[j].n })
+		if len(sibs) > maxSiblingBoards {
+			sibs = sibs[:maxSiblingBoards]
+		}
+		for _, x := range sibs {
+			fmt.Fprintf(&sb, "\nalso: %d post(s) on b/%s in the last 24h — xfa read --board b/%s\n", x.n, x.slug, x.slug)
 		}
 	}
 	// Independent of the sample: surface open questions whenever there are any.
