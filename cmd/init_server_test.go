@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,12 +37,13 @@ func remoteProject(t *testing.T) string {
 
 func TestInitServerWritesMarkerRegistersAndInstalls(t *testing.T) {
 	dir := remoteProject(t)
-	srv, last, verb := fakeServer(t, remote.Response{})
+	srv, last, verb := fakeServer(t, remote.Response{Stdout: "registered x \u2192 b/foo\n"})
 	out, err := runXfaErr(t, "init", "--server", srv.URL, "--provider", "claude")
 	if err != nil {
 		t.Fatalf("err=%v out=%q", err, out)
 	}
-	if *verb != "project-register" || strings.Join(last.Args, " ") != "--board "+filepath.Base(dir) || last.Cwd != dir {
+	// No --board: the client forwards no slug and JOINS the server's board.
+	if *verb != "project-register" || len(last.Args) != 0 || last.Cwd != dir {
 		t.Fatalf("verb=%q req=%+v dir=%s", *verb, *last, dir)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, store.MarkerName))
@@ -49,7 +53,23 @@ func TestInitServerWritesMarkerRegistersAndInstalls(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, store.LocalDirName)); err == nil {
 		t.Fatal("remote init must not create .xfa/")
 	}
-	if !strings.Contains(out, "pinned server "+srv.URL) || !strings.Contains(out, "installed provider: claude") {
+	if !strings.Contains(out, "pinned server "+srv.URL) || !strings.Contains(out, "installed provider: claude") || !strings.Contains(out, "board b/foo ready") {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+// An explicit --board is still forwarded verbatim (overrides the join).
+func TestInitServerExplicitBoardForwarded(t *testing.T) {
+	remoteProject(t)
+	srv, last, verb := fakeServer(t, remote.Response{Stdout: "registered x \u2192 b/shared\n"})
+	out, err := runXfaErr(t, "init", "--server", srv.URL, "--board", "b/shared", "--provider", "claude")
+	if err != nil {
+		t.Fatalf("err=%v out=%q", err, out)
+	}
+	if *verb != "project-register" || strings.Join(last.Args, " ") != "--board shared" {
+		t.Fatalf("verb=%q args=%v", *verb, last.Args)
+	}
+	if !strings.Contains(out, "board b/shared ready") {
 		t.Fatalf("out = %q", out)
 	}
 }
@@ -118,7 +138,7 @@ func TestInitServerRefusals(t *testing.T) {
 
 func TestBareInitUnderResolvedURLTakesRemoteBranch(t *testing.T) {
 	dir := remoteProject(t)
-	srv, _, verb := fakeServer(t, remote.Response{})
+	srv, _, verb := fakeServer(t, remote.Response{Stdout: "registered x → b/foo\n"})
 	store.WriteMarker(dir, srv.URL)
 	out, err := runXfaErr(t, "init", "--provider", "claude")
 	if err != nil || *verb != "project-register" || !strings.Contains(out, "using database "+srv.URL) {
@@ -133,5 +153,146 @@ func TestBareInitUnderResolvedURLTakesRemoteBranch(t *testing.T) {
 	}
 	if _, serr := os.Stat(filepath.Join(dir, store.MarkerName)); serr == nil {
 		t.Fatal("bare init must not write a marker")
+	}
+}
+
+// twoBoardServer routes /v1/boards (two boards) and /v1/project-register
+// (echoes the chosen board), capturing the project-register args.
+func twoBoardServer(t *testing.T) (*httptest.Server, *[]string) {
+	t.Helper()
+	var regArgs []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		verb := strings.TrimPrefix(r.URL.Path, "/v1/")
+		var req remote.Request
+		json.NewDecoder(r.Body).Decode(&req)
+		switch verb {
+		case "boards":
+			json.NewEncoder(w).Encode(remote.Response{Stdout: `[{"Slug":"pwn"},{"Slug":"other"}]`})
+		case "project-register":
+			if len(req.Args) == 0 {
+				// no --board: the server cannot choose among two boards, so it
+				// rejects — exactly what drives the client's interactive pick.
+				json.NewEncoder(w).Encode(remote.Response{Code: 1,
+					Stderr: "Error: server has 2 boards (b/other, b/pwn) — pass --board <slug>\n"})
+				return
+			}
+			regArgs = req.Args
+			slug := req.Args[1]
+			json.NewEncoder(w).Encode(remote.Response{Stdout: "registered x → b/" + slug + "\n"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &regArgs
+}
+
+// A TTY init --server against a multi-board server prompts; the chosen board
+// is what reaches project-register, and it is what init announces.
+func TestInitServerPicksBoardInteractively(t *testing.T) {
+	old := stdinIsTTY
+	stdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { stdinIsTTY = old })
+
+	for _, c := range []struct {
+		name, input, wantArg, wantBoard string
+	}{
+		{"by number", "2\n", "--board other", "b/other ready"},
+		{"first by number", "1\n", "--board pwn", "b/pwn ready"},
+		{"default is first", "\n", "--board pwn", "b/pwn ready"},
+		{"new name scrubbed", "Fresh Board!\n", "--board fresh-board", "b/fresh-board ready"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			remoteProject(t)
+			srv, regArgs := twoBoardServer(t)
+			rootCmd.SetIn(strings.NewReader(c.input))
+			out, err := runXfaErr(t, "init", "--server", srv.URL, "--provider", "claude")
+			if err != nil {
+				t.Fatalf("err=%v out=%q", err, out)
+			}
+			if strings.Join(*regArgs, " ") != c.wantArg {
+				t.Fatalf("regArgs = %v, want %q", *regArgs, c.wantArg)
+			}
+			if !strings.Contains(out, c.wantBoard) {
+				t.Fatalf("out = %q, want %q", out, c.wantBoard)
+			}
+		})
+	}
+}
+
+// An out-of-range number is rejected and the marker rolled back.
+func TestInitServerPickerRejectsBadChoice(t *testing.T) {
+	old := stdinIsTTY
+	stdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { stdinIsTTY = old })
+	// A plain out-of-range number and a number too big for int both reject,
+	// rather than the latter falling through to create a board named "999…".
+	for _, in := range []string{"9\n", "99999999999999999999\n"} {
+		t.Run(strings.TrimSpace(in), func(t *testing.T) {
+			dir := remoteProject(t)
+			srv, _ := twoBoardServer(t)
+			rootCmd.SetIn(strings.NewReader(in))
+			if _, err := runXfaErr(t, "init", "--server", srv.URL); err == nil || !strings.Contains(err.Error(), "out of range") {
+				t.Fatalf("err = %v", err)
+			}
+			if _, serr := os.Stat(filepath.Join(dir, store.MarkerName)); serr == nil {
+				t.Fatal("marker left behind after a rejected pick")
+			}
+		})
+	}
+}
+
+// An explicit --board never prompts, even on a TTY against a multi-board
+// server.
+func TestInitServerExplicitBoardSkipsPicker(t *testing.T) {
+	remoteProject(t)
+	old := stdinIsTTY
+	stdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { stdinIsTTY = old })
+	srv, regArgs := twoBoardServer(t)
+	rootCmd.SetIn(strings.NewReader("2\n")) // would pick "other" if consulted
+	out, err := runXfaErr(t, "init", "--server", srv.URL, "--board", "b/mine", "--provider", "claude")
+	if err != nil {
+		t.Fatalf("err=%v out=%q", err, out)
+	}
+	if strings.Join(*regArgs, " ") != "--board mine" {
+		t.Fatalf("regArgs = %v", *regArgs)
+	}
+}
+
+// On a TTY, a server that accepts the no-board register (sole board, or this
+// dir already bound) is joined silently — the picker never appears.
+func TestInitServerTTYSingleBoardNoPrompt(t *testing.T) {
+	old := stdinIsTTY
+	stdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { stdinIsTTY = old })
+	remoteProject(t)
+	srv, last, _ := fakeServer(t, remote.Response{Stdout: "registered x → b/pwn\n"})
+	rootCmd.SetIn(strings.NewReader("2\n")) // must be ignored: no ambiguity
+	out, err := runXfaErr(t, "init", "--server", srv.URL, "--provider", "claude")
+	if err != nil {
+		t.Fatalf("err=%v out=%q", err, out)
+	}
+	if len(last.Args) != 0 {
+		t.Fatalf("forwarded a board unexpectedly: %v", last.Args)
+	}
+	if strings.Contains(out, "server has") || !strings.Contains(out, "board b/pwn ready") {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+// EOF at the picker (Ctrl-D) aborts cleanly and writes no marker.
+func TestInitServerPickerEOFAbortsWithoutMarker(t *testing.T) {
+	dir := remoteProject(t)
+	old := stdinIsTTY
+	stdinIsTTY = func() bool { return true }
+	t.Cleanup(func() { stdinIsTTY = old })
+	srv, _ := twoBoardServer(t)
+	rootCmd.SetIn(strings.NewReader("")) // immediate EOF
+	if _, err := runXfaErr(t, "init", "--server", srv.URL); err == nil || !strings.Contains(err.Error(), "no board selected") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, serr := os.Stat(filepath.Join(dir, store.MarkerName)); serr == nil {
+		t.Fatal("marker written despite an aborted pick")
 	}
 }

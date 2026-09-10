@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/securisec/xfa/internal/install"
@@ -63,10 +67,13 @@ var initCmd = &cobra.Command{
 		// registration from this very init lands in the custom DB. Re-init
 		// without --db leaves an existing marker alone (resolution below
 		// still picks it up).
-		rollbackMarker := func() {} // set by the --server arm only
 		if server != "" {
 			// --server pins the project to a remote xfa server: same marker,
-			// a URL instead of a path. Nothing local is created or opened.
+			// a URL instead of a path. Nothing local is created or opened, and
+			// the marker is written only AFTER the server accepts the
+			// registration (below), so an interrupted or refused init — a
+			// dead server, a rejected board, a Ctrl-C at the picker — strands
+			// nothing on disk and needs no rollback.
 			if !store.IsRemote(server) {
 				return fmt.Errorf("--server %s must be an http(s) URL without credentials", server)
 			}
@@ -76,22 +83,6 @@ var initCmd = &cobra.Command{
 			if fi, err := os.Lstat(filepath.Join(cwd, store.LocalDirName)); err == nil && fi.IsDir() {
 				return fmt.Errorf("this project has a local %s/ database; move or remove it before pinning to a server", store.LocalDirName)
 			}
-			// Snapshot the marker so a failed registration leaves the OLD pin
-			// in place (a re-pin that fails must not strand the project on
-			// the URL that just refused it), or no marker if there was none.
-			markerPath := filepath.Join(cwd, store.MarkerName)
-			prev, prevErr := os.ReadFile(markerPath)
-			if err := store.WriteMarker(cwd, server); err != nil {
-				return err
-			}
-			rollbackMarker = func() {
-				if prevErr == nil {
-					os.WriteFile(markerPath, prev, 0o644)
-				} else {
-					os.Remove(markerPath)
-				}
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "pinned server %s (%s)\n", server, store.MarkerName)
 		} else if db != "" {
 			abs, err := filepath.Abs(db)
 			if err != nil {
@@ -141,23 +132,66 @@ var initCmd = &cobra.Command{
 				fmt.Fprintf(cmd.OutOrStdout(), "created %s/ — project database %s\n", store.LocalDirName, filepath.Join(store.LocalDirName, "board.db"))
 			}
 		}
-		resolved, err := store.ResolvePath(cwd)
-		if err != nil {
-			return err
+		// The --server arm defers its marker, so ResolvePath cannot see it
+		// yet; the URL is authoritative there. Every other arm resolves from
+		// disk (the --db/local marker it wrote, or a committed one).
+		resolved := server
+		if server == "" {
+			r, err := store.ResolvePath(cwd)
+			if err != nil {
+				return err
+			}
+			resolved = r
 		}
 		boardSlug := slug
 		if store.IsRemote(resolved) {
 			// Remote branch, entered by RESOLUTION (flag, committed marker, or
 			// XFA_DB=<url> alike): registration runs on the server; nothing
-			// local is opened.
+			// local is opened. Without an explicit --board the client JOINS
+			// the server's board rather than forking one named after its own
+			// directory (two machines rarely share a directory basename).
+			regArgs := []string(nil)
+			if explicit {
+				regArgs = []string{"--board", slug}
+			}
 			resp, ferr := remote.Forward(resolved, "project-register",
-				remote.Request{Args: []string{"--board", slug}, Cwd: cwd}, forwardTimeout)
+				remote.Request{Args: regArgs, Cwd: cwd}, verbForwardTimeout())
+			// The server rejects a non-explicit register only when it cannot
+			// choose a board (none, or several) — an already-bound dir or a
+			// sole-board server succeeds on the first try, so re-init never
+			// prompts. On a TTY, let the human disambiguate and retry;
+			// pickRemoteBoard returns "" when it cannot help (0 or 1 board),
+			// so the original error stands. A transport error is never a pick.
+			if ferr == nil && resp.Code != 0 && !explicit && stdinIsTTY() {
+				chosen, perr := pickRemoteBoard(cmd, resolved, cwd)
+				if perr != nil {
+					return perr
+				}
+				if chosen != "" {
+					resp, ferr = remote.Forward(resolved, "project-register",
+						remote.Request{Args: []string{"--board", chosen}, Cwd: cwd}, verbForwardTimeout())
+				}
+			}
 			if ferr == nil && resp.Code != 0 {
-				ferr = fmt.Errorf("%s", strings.TrimSpace(strings.TrimPrefix(resp.Stderr, "Error: ")))
+				ferr = respErr(resp)
 			}
 			if ferr != nil {
-				rollbackMarker()
 				return ferr
+			}
+			// The server prints "registered <dir> → b/<slug>"; surface the
+			// board it actually bound us to, not our own directory name.
+			i := strings.LastIndex(resp.Stdout, "\u2192 b/")
+			if i < 0 {
+				return fmt.Errorf("server registered but reported no board: %q", resp.Stdout)
+			}
+			boardSlug = strings.TrimSpace(resp.Stdout[i+len("\u2192 b/"):])
+			// Write the marker only now — after the server accepted us — so an
+			// interrupted pick or a refused registration leaves nothing behind.
+			if server != "" {
+				if err := store.WriteMarker(cwd, server); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "pinned server %s (%s)\n", server, store.MarkerName)
 			}
 		} else {
 			s, err := openStore()
@@ -186,6 +220,65 @@ var initCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "board b/%s ready. Agents in this directory will discover it at session start.\n", boardSlug)
 		return nil
 	},
+}
+
+// respErr turns a non-zero remote response into the same error text a local
+// command would print, stripping the "Error: " prefix cobra adds on the wire.
+func respErr(resp remote.Response) error {
+	return fmt.Errorf("%s", strings.TrimSpace(strings.TrimPrefix(resp.Stderr, "Error: ")))
+}
+
+// pickRemoteBoard fetches the server's boards and, when there is more than
+// one, prompts the human to join one by number or name a new one (scrubbed
+// through Slugify). It returns "" for 0 or 1 board so the server keeps
+// deciding (join the sole board, or report there is none). TTY-gated by the
+// caller; a plain numbered stdin prompt, deliberately not a TUI.
+func pickRemoteBoard(cmd *cobra.Command, base, dir string) (string, error) {
+	resp, err := remote.Forward(base, "boards",
+		remote.Request{Args: []string{"--json"}, Cwd: dir}, verbForwardTimeout())
+	if err != nil {
+		return "", err
+	}
+	if resp.Code != 0 {
+		return "", respErr(resp)
+	}
+	var boards []store.Board
+	if err := json.Unmarshal([]byte(resp.Stdout), &boards); err != nil {
+		return "", fmt.Errorf("cannot read server boards: %w", err)
+	}
+	if len(boards) <= 1 {
+		return "", nil
+	}
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "server has %d boards \u2014 enter a number to join, or type a new name (default 1):\n", len(boards))
+	for i, b := range boards {
+		fmt.Fprintf(out, "  %d) b/%s\n", i+1, b.Slug)
+	}
+	fmt.Fprint(out, "> ")
+	sc := bufio.NewScanner(cmd.InOrStdin())
+	if !sc.Scan() {
+		if e := sc.Err(); e != nil {
+			return "", e
+		}
+		return "", fmt.Errorf("no board selected")
+	}
+	line := strings.TrimSpace(sc.Text())
+	if line == "" {
+		return boards[0].Slug, nil // default: the first board listed
+	}
+	if n, err := strconv.Atoi(line); err == nil {
+		if n < 1 || n > len(boards) {
+			return "", fmt.Errorf("choice %d is out of range (1-%d)", n, len(boards))
+		}
+		return boards[n-1].Slug, nil
+	} else if errors.Is(err, strconv.ErrRange) {
+		return "", fmt.Errorf("choice %q is out of range (1-%d)", line, len(boards))
+	}
+	slug := store.Slugify(strings.TrimPrefix(line, "b/"))
+	if slug == "" {
+		return "", fmt.Errorf("board name %q produced an empty slug", line)
+	}
+	return slug, nil
 }
 
 // warnPreviousGlobalRegistration tells the user that going local forks a

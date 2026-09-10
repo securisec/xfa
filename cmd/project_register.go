@@ -44,10 +44,10 @@ var projectRegisterCmd = &cobra.Command{
 	Hidden: true,
 	Args:   noPositional,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		slug, _ := cmd.Flags().GetString("board")
-		slug = store.Slugify(strings.TrimPrefix(slug, "b/"))
-		if slug == "" {
-			return fmt.Errorf("--board is required")
+		given, _ := cmd.Flags().GetString("board")
+		slug := store.Slugify(strings.TrimPrefix(given, "b/"))
+		if slug == "" && strings.TrimSpace(given) != "" {
+			return fmt.Errorf("--board %q produced an empty slug", given)
 		}
 		s, err := openStore()
 		if err != nil {
@@ -62,6 +62,37 @@ var projectRegisterCmd = &cobra.Command{
 				return ""
 			}
 			return b.Slug
+		}
+		if slug == "" {
+			// No explicit board: JOIN the server's board. Re-use this dir's
+			// (or an ancestor's) existing binding so re-init is idempotent;
+			// otherwise the server must have exactly one board to join.
+			switch {
+			case err == nil:
+				slug = boardSlugOf(p.BoardID)
+			case errors.Is(err, store.ErrNoBoard):
+				boards, lerr := s.ListBoards()
+				if lerr != nil {
+					return lerr
+				}
+				switch len(boards) {
+				case 1:
+					slug = boards[0].Slug
+				case 0:
+					return fmt.Errorf("server has no board yet \u2014 ask the host to run xfa init, or pass --board <slug>")
+				default:
+					names := make([]string, len(boards))
+					for i, b := range boards {
+						names[i] = "b/" + b.Slug
+					}
+					return fmt.Errorf("server has %d boards (%s) \u2014 pass --board <slug>", len(boards), strings.Join(names, ", "))
+				}
+			default:
+				return err
+			}
+			if slug == "" {
+				return fmt.Errorf("could not determine the server's board \u2014 pass --board <slug>")
+			}
 		}
 		switch {
 		case err == nil && p.Path == key:

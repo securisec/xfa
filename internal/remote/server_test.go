@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 var testExe string
@@ -144,16 +145,14 @@ func TestRejectsBeforeExec(t *testing.T) {
 		{"origin null", ok, map[string]string{"Origin": "null"}, 403, "forbidden: cross-origin"},
 		{"content-type", ok, map[string]string{"Content-Type": "text/plain"}, 415, "Content-Type must be application/json"},
 		{"relative cwd", Request{Cwd: "rel"}, nil, 400, "cwd must be an absolute path"},
-		{"root cwd", Request{Cwd: "/"}, nil, 400, "cwd must be at least two levels deep"},
-		{"depth1 cwd", Request{Cwd: "/Users"}, nil, 400, "cwd must be at least two levels deep"},
 		{"nul cwd", Request{Cwd: "/a/b\x00c"}, nil, 400, "cwd must be an absolute path"},
 		{"control cwd", Request{Cwd: "/a/b\n"}, nil, 400, "cwd must be an absolute path"},
 		{"long cwd", Request{Cwd: "/a/" + strings.Repeat("b", MaxCwdLen)}, nil, 400, "cwd too long"},
 		{"too many args", Request{Cwd: "/a/b", Args: make([]string, MaxArgs+1)}, nil, 400, "too many args"},
 		{"long arg", Request{Cwd: "/a/b", Args: []string{strings.Repeat("x", MaxArgLen+1)}}, nil, 400, "arg too long"},
 		{"nul arg", Request{Cwd: "/a/b", Args: []string{"a\x00b"}}, nil, 400, "arg contains NUL"},
-		{"bad handle", Request{Cwd: "/a/b", Handle: "../../etc"}, nil, 400, "handle must look like word-word-N"},
-		{"long handle", Request{Cwd: "/a/b", Handle: strings.Repeat("a", 65)}, nil, 400, "handle must look like word-word-N"},
+		{"control handle", Request{Cwd: "/a/b", Handle: "a\nb"}, nil, 400, "invalid handle"},
+		{"long handle", Request{Cwd: "/a/b", Handle: strings.Repeat("a", 65)}, nil, 400, "invalid handle"},
 	}
 	for _, c := range cases {
 		resp, b := post(t, srv, "read", c.req, c.hdr)
@@ -175,8 +174,8 @@ func TestRejectsBeforeExec(t *testing.T) {
 func TestHookPayloadCwdValidated(t *testing.T) {
 	srv, _ := newServer(t)
 	for _, payload := range []string{
-		`{"cwd":"/"}`, `{"cwd":"rel"}`, `{"workspacePaths":["/"]}`,
-		`{"cwd":"/a/b","workspacePaths":["/"]}`, // every cwd-like field is checked
+		`{"cwd":"rel"}`, `{"workspacePaths":["rel"]}`,
+		`{"cwd":"/a/b","workspacePaths":["rel"]}`, // every cwd-like field is still checked
 	} {
 		resp, b := post(t, srv, "hook", Request{Args: []string{"session-start"}, Cwd: "/a/b", Stdin: []byte(payload)}, nil)
 		if resp.StatusCode != 400 || !strings.Contains(string(b), "hook payload cwd") {
@@ -265,8 +264,20 @@ func TestOutputCap(t *testing.T) {
 	srv, _ := newServer(t)
 	_, b := post(t, srv, "read", Request{Args: []string{"--help"}, Cwd: "/a/b"}, nil)
 	r := decode(t, b)
-	if r.Code != 0 || !strings.HasSuffix(r.Stdout, "\n[output truncated]\n") || len(r.Stdout) > MaxOutput+len("\n[output truncated]\n") {
-		t.Fatalf("cap: code=%d len=%d tail=%q", r.Code, len(r.Stdout), r.Stdout[max(0, len(r.Stdout)-30):])
+	if r.Code != 1 || len(r.Stdout) > MaxOutput || !utf8.ValidString(r.Stdout) || !strings.Contains(r.Stderr, "truncated") {
+		t.Fatalf("cap: code=%d len=%d stderr=%q", r.Code, len(r.Stdout), r.Stderr)
+	}
+}
+
+// project-register is the only verb that persists cwd into projects.path, so
+// it alone still enforces the depth floor (rejected before exec, no DB).
+func TestProjectRegisterRequiresDepth(t *testing.T) {
+	srv, _ := newServer(t)
+	for _, c := range []string{"/", "/Users"} {
+		resp, b := post(t, srv, "project-register", Request{Cwd: c}, nil)
+		if resp.StatusCode != 400 || !strings.Contains(string(b), "at least two levels deep") {
+			t.Errorf("%s: %d %s", c, resp.StatusCode, b)
+		}
 	}
 }
 
@@ -284,45 +295,76 @@ func TestSignalDeathIsExitOne(t *testing.T) {
 	}
 }
 
-func TestConcurrencyCaps(t *testing.T) {
-	old, oldI := Concurrency, InboxConcurrency
-	Concurrency, InboxConcurrency = 1, 1
-	t.Cleanup(func() { Concurrency, InboxConcurrency = old, oldI })
-	oldT := InboxTimeout
-	InboxTimeout = 3 * time.Second
-	t.Cleanup(func() { InboxTimeout = oldT })
-	srv, _ := newServer(t)
-	h := seed(t, srv, "/c/p", "cc")
+// A full semaphore makes a request BLOCK until a slot frees or the client
+// gives up; on client cancel it answers 503. (Was: instant 503 on arrival,
+// which turned a subagent burst into random hard failures.)
+func TestFullSemaphoreBlocksThenCancels(t *testing.T) {
+	s := &server{exe: "/nonexistent", log: io.Discard,
+		sem: make(chan struct{}, 1), inboxSem: make(chan struct{}, 1)}
+	s.inboxSem <- struct{}{} // hold the only inbox slot
+	body, _ := json.Marshal(Request{Cwd: "/a/b"})
+	ctx, cancel := context.WithCancel(context.Background())
+	r := httptest.NewRequest("POST", "/v1/inbox", bytes.NewReader(body)).WithContext(ctx)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
 	done := make(chan struct{})
-	go func() {
-		// Not post(): t.Fatal from a non-test goroutine is illegal, and the
-		// close must happen even when the request errors.
-		defer close(done)
-		body, _ := json.Marshal(Request{Args: []string{"--as", h, "--wait"}, Cwd: "/c/p", Handle: h})
-		if r, err := http.Post(srv.URL+"/v1/inbox", "application/json", bytes.NewReader(body)); err == nil {
-			io.Copy(io.Discard, r.Body)
-			r.Body.Close()
-		}
-	}()
-	// poll until the slot is taken (never a fixed sleep). The sleep leads the
-	// poll: with one slot, a poll that beats the waiter to it takes the only
-	// slot and the waiter — not the poller — is the one that gets the 503.
-	var resp *http.Response
-	var b []byte
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		time.Sleep(50 * time.Millisecond)
-		resp, b = post(t, srv, "inbox", Request{Args: []string{"--as", h}, Cwd: "/c/p", Handle: h}, nil)
-		if resp.StatusCode == 503 || time.Now().After(deadline) {
-			break
-		}
+	go func() { s.serve(w, r, "inbox"); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("served without a free slot")
+	case <-time.After(200 * time.Millisecond):
 	}
-	if resp.StatusCode != 503 || !strings.Contains(string(b), "server busy") {
-		t.Fatalf("second inbox: %d %s", resp.StatusCode, b)
+	cancel() // client gives up waiting
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not return after cancel")
 	}
-	resp, _ = post(t, srv, "boards", Request{Cwd: "/c/p"}, nil)
-	if resp.StatusCode != 200 {
-		t.Fatalf("boards while inbox slot is held: %d", resp.StatusCode)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("code = %d, want 503", w.Code)
 	}
-	<-done
+}
+
+// inbox and the rest use separate semaphores: a saturated inboxSem never
+// blocks a plain verb.
+func TestSeparateSemaphores(t *testing.T) {
+	s := &server{exe: "/nonexistent", log: io.Discard,
+		sem: make(chan struct{}, 1), inboxSem: make(chan struct{}, 1)}
+	s.inboxSem <- struct{}{} // inbox slot full
+	body, _ := json.Marshal(Request{Cwd: "/a/b"})
+	r := httptest.NewRequest("POST", "/v1/boards", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.serve(w, r, "boards") // must not block on the full inboxSem
+	if w.Code != http.StatusOK {
+		t.Fatalf("boards code = %d, want 200 (exec failure still returns a 200 envelope)", w.Code)
+	}
+}
+
+// A request that queues on a full semaphore runs as soon as a slot frees.
+func TestQueuedRequestRunsAfterSlotFrees(t *testing.T) {
+	s := &server{exe: "/nonexistent", log: io.Discard,
+		sem: make(chan struct{}, 1), inboxSem: make(chan struct{}, 1)}
+	s.inboxSem <- struct{}{} // hold the only inbox slot
+	body, _ := json.Marshal(Request{Cwd: "/a/b"})
+	r := httptest.NewRequest("POST", "/v1/inbox", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() { s.serve(w, r, "inbox"); close(done) }()
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+		t.Fatal("ran before a slot was free")
+	default:
+	}
+	<-s.inboxSem // free the slot; the queued request must now proceed
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("queued request did not run after the slot freed")
+	}
+	if w.Code != http.StatusOK { // exec failure still returns a 200 envelope
+		t.Fatalf("code = %d, want 200", w.Code)
+	}
 }

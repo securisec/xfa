@@ -118,3 +118,50 @@ func TestProjectRegisterIsHidden(t *testing.T) {
 		t.Fatal("project-register must be hidden")
 	}
 }
+
+// With no --board, project-register JOINS the server's board: the sole board
+// when there is one, this dir's existing binding on re-init, and a loud error
+// at 0 or >1 boards.
+func TestProjectRegisterJoinsServerBoard(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "board.db")
+	t.Setenv("XFA_DB", dbPath)
+	resetProjectRegisterFlags(t)
+	t.Cleanup(func() { resetProjectRegisterFlags(t) })
+
+	// 0 boards → refuse
+	t.Setenv("XFA_CWD", "/client/a")
+	if _, err := runXfaErr(t, "project-register"); err == nil || !strings.Contains(err.Error(), "no board yet") {
+		t.Fatalf("0 boards: %v", err)
+	}
+	// seed one board
+	if _, err := runXfaErr(t, "project-register", "--board", "pwn"); err != nil {
+		t.Fatal(err)
+	}
+	resetProjectRegisterFlags(t)
+	// 1 board → a fresh client with no --board joins it
+	t.Setenv("XFA_CWD", "/client/b")
+	if out, err := runXfaErr(t, "project-register"); err != nil || !strings.Contains(out, "b/pwn") {
+		t.Fatalf("join: err=%v out=%q", err, out)
+	}
+	// re-register the same dir (still no --board) is idempotent
+	if out, err := runXfaErr(t, "project-register"); err != nil || !strings.Contains(out, "b/pwn") {
+		t.Fatalf("idempotent join: err=%v out=%q", err, out)
+	}
+	// add a 2nd board, then a NEW client with no --board is ambiguous
+	resetProjectRegisterFlags(t)
+	t.Setenv("XFA_CWD", "/client/c")
+	if _, err := runXfaErr(t, "project-register", "--board", "other"); err != nil {
+		t.Fatal(err)
+	}
+	resetProjectRegisterFlags(t)
+	t.Setenv("XFA_CWD", "/client/d")
+	if _, err := runXfaErr(t, "project-register"); err == nil || !strings.Contains(err.Error(), "boards") {
+		t.Fatalf(">1 boards: %v", err)
+	}
+	// an ALREADY-BOUND dir still re-joins its board on a >1-board server
+	resetProjectRegisterFlags(t)
+	t.Setenv("XFA_CWD", "/client/b")
+	if out, err := runXfaErr(t, "project-register"); err != nil || !strings.Contains(out, "b/pwn") {
+		t.Fatalf("bound dir on 2-board server: err=%v out=%q", err, out)
+	}
+}

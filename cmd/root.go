@@ -104,9 +104,12 @@ func forwardIfRemote(cmd *cobra.Command, _ []string) error {
 			break
 		}
 	}
-	timeout := forwardTimeout
-	if verb == "hook" {
+	timeout := verbForwardTimeout()
+	switch verb {
+	case "hook":
 		timeout = hookTimeout
+	case "inbox":
+		timeout = forwardTimeout // inbox --wait legitimately runs 9m
 	}
 	resp, err := remote.Forward(path, verb, remote.Request{
 		Args: args, Cwd: dir, Handle: os.Getenv("XFA_HANDLE"), Stdin: stdin,
@@ -121,6 +124,11 @@ func forwardIfRemote(cmd *cobra.Command, _ []string) error {
 	io.WriteString(cmd.ErrOrStderr(), resp.Stderr)
 	return ExitCode(resp.Code)
 }
+
+// verbForwardTimeout is the client-side cap for every forwarded verb except
+// inbox (long) and hook (short): a little over the server's own VerbTimeout so
+// the timed-out (124) envelope arrives before the client gives up.
+func verbForwardTimeout() time.Duration { return remote.VerbTimeout + 5*time.Second }
 
 func openStore() (*store.Store, error) {
 	wd, err := os.Getwd()

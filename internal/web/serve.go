@@ -51,7 +51,15 @@ func Serve(ctx context.Context, s *store.Store, o Options) error {
 // timeouts are new for the web UI too (it had none): headers 5s, body 10s —
 // nothing the UI does approaches either.
 func ServeUntil(ctx context.Context, ln net.Listener, h http.Handler) error {
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second}
+	// BaseContext ties every request context to ctx, so a shutdown cancels
+	// in-flight requests and their exec.CommandContext children (WaitDelay
+	// caps the wait), instead of orphaning a 9m inbox --wait subprocess.
+	srv := &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {

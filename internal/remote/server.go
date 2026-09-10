@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Limits. Package vars so tests can shrink them. Concurrency numbers are RSS
@@ -29,10 +29,6 @@ var (
 	Concurrency      = 16
 	InboxConcurrency = 32
 )
-
-// handleRe is the minted shape from internal/handle (adjective-noun-N). It
-// gates only XFA_HANDLE; --as rides in args and ends in GetAgent like locally.
-var handleRe = regexp.MustCompile(`^[a-z]+-[a-z]+-[0-9]{1,2}$`)
 
 type server struct {
 	db, exe       string
@@ -75,15 +71,22 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request, verb string) {
 	if verb == "inbox" {
 		sem, timeout = s.inboxSem, InboxTimeout
 	}
+	// Bound the whole in-flight life (queue wait + exec) by timeout, so a
+	// client that never disconnects cannot park a goroutine and its decoded
+	// body on this unauthenticated listener forever.
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
 	select {
 	case sem <- struct{}{}:
 		defer func() { <-sem }()
-	default:
+	case <-ctx.Done():
+		// Client gave up, server is shutting down, or the queue wait itself
+		// hit timeout: bursts queue here instead of hard-failing on arrival.
 		fail(w, http.StatusServiceUnavailable, "server busy")
 		logf("reject", http.StatusServiceUnavailable)
 		return
 	}
-	resp := s.exec(r.Context(), verb, req, timeout)
+	resp := s.exec(ctx, verb, req, timeout)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 	logf("exit", resp.Code)
@@ -111,6 +114,12 @@ func validate(w http.ResponseWriter, r *http.Request, verb string) (req Request,
 	if m := checkCwd(req.Cwd); m != "" {
 		return req, http.StatusBadRequest, m
 	}
+	// Only project-register persists cwd into projects.path, where a shallow
+	// registered path ("/" or "/Users") would capture ResolveProject's
+	// walk-up; every other verb at worst fails "no board here".
+	if verb == "project-register" && strings.Count(filepath.Clean(req.Cwd), string(filepath.Separator)) < 2 {
+		return req, http.StatusBadRequest, "cwd must be at least two levels deep"
+	}
 	if len(req.Args) > MaxArgs {
 		return req, http.StatusBadRequest, "too many args"
 	}
@@ -122,8 +131,10 @@ func validate(w http.ResponseWriter, r *http.Request, verb string) (req Request,
 			return req, http.StatusBadRequest, "arg contains NUL"
 		}
 	}
-	if req.Handle != "" && (len(req.Handle) > 64 || !handleRe.MatchString(req.Handle)) {
-		return req, http.StatusBadRequest, "handle must look like word-word-N"
+	if req.Handle != "" && (len(req.Handle) > 64 || strings.IndexFunc(req.Handle, func(r rune) bool { return r < 0x20 }) >= 0) {
+		// Shape is not checked (--as carries arbitrary handles too); an
+		// unknown handle is a no-op in GetAgent downstream, exactly as local.
+		return req, http.StatusBadRequest, "invalid handle"
 	}
 	if verb != "hook" {
 		req.Stdin = nil
@@ -156,9 +167,8 @@ func validate(w http.ResponseWriter, r *http.Request, verb string) (req Request,
 
 // checkCwd returns "" or the rejection message. The string is only ever a
 // lookup key in the projects table — but NormalizePath runs EvalSymlinks on
-// it against the server filesystem (read-only), and a registered "/" or
-// "/Users" would capture ResolveProject's walk-up for every unregistered
-// path on a --global/XFA_DB host, so depth ≥ 2 is required.
+// it against the server filesystem (read-only). The ≥2-levels floor that
+// guards project-register's projects.path insert lives in validate, not here.
 func checkCwd(c string) string {
 	if len(c) > MaxCwdLen {
 		return "cwd too long"
@@ -167,9 +177,6 @@ func checkCwd(c string) string {
 	// projects.path and from there into every listing.
 	if strings.IndexFunc(c, func(r rune) bool { return r < 0x20 }) >= 0 || !filepath.IsAbs(c) {
 		return "cwd must be an absolute path"
-	}
-	if strings.Count(filepath.Clean(c), string(filepath.Separator)) < 2 {
-		return "cwd must be at least two levels deep"
 	}
 	return ""
 }
@@ -187,7 +194,9 @@ func (s *server) exec(ctx context.Context, verb string, req Request, timeout tim
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
 	err := c.Run()
-	resp := Response{Stdout: capped(out.Bytes()), Stderr: capped(errb.Bytes())}
+	stdout, otrunc := capped(out.Bytes())
+	stderr, etrunc := capped(errb.Bytes())
+	resp := Response{Stdout: stdout, Stderr: stderr}
 	switch {
 	case ctx.Err() == context.DeadlineExceeded:
 		resp.Code = 124
@@ -206,6 +215,12 @@ func (s *server) exec(ctx context.Context, verb string, req Request, timeout tim
 			resp.Stderr += "xfa server: " + err.Error() + "\n"
 		}
 	}
+	// A truncated payload must not read as a clean success: JSON on stdout
+	// would be invalid, so signal via a non-zero code and a stderr note.
+	if (otrunc || etrunc) && resp.Code == 0 {
+		resp.Code = 1
+		resp.Stderr += "xfa server: output truncated\n"
+	}
 	return resp
 }
 
@@ -213,9 +228,13 @@ func (s *server) exec(ctx context.Context, verb string, req Request, timeout tim
 // listings are bounded by --limit/MaxPostLen, so growth beyond this is a
 // transient RSS cost, not a correctness one; stream-cap if a board ever
 // prints >100 MiB.
-func capped(b []byte) string {
+func capped(b []byte) (string, bool) {
 	if len(b) <= MaxOutput {
-		return string(b)
+		return string(b), false
 	}
-	return string(b[:MaxOutput]) + "\n[output truncated]\n"
+	n := MaxOutput
+	for n > 0 && !utf8.RuneStart(b[n]) { // never split a multi-byte rune
+		n--
+	}
+	return string(b[:n]), true
 }
