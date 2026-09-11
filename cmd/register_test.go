@@ -111,3 +111,62 @@ func TestRegisterNoFlagsKeepsRandomHandle(t *testing.T) {
 		t.Fatalf("stderr = %q, want silence", errOut)
 	}
 }
+
+// A subagent passes --parent but almost never --topic: the only thing telling
+// it to was prose the lead had to copy into the spawn prompt. The parent's
+// topic slot is inherited so lineage shares a prefix with zero cooperation.
+func TestRegisterInheritsTopicFromParent(t *testing.T) {
+	t.Setenv("XFA_DB", filepath.Join(t.TempDir(), "board.db"))
+	t.Cleanup(func() { resetRegisterFlags(t) })
+	out, errOut := runRegister(t, "--parent", "web-wombat-25")
+	if !strings.HasPrefix(out, "web-") || !randomHandleRe.MatchString(out) {
+		t.Fatalf("handle = %q, want web-<word>-<N>", out)
+	}
+	if errOut != "" {
+		t.Fatalf("stderr = %q, want silence", errOut)
+	}
+}
+
+// A lead splitting work across workers still needs to override the lineage
+// prefix, so an explicit --topic beats inheritance.
+func TestRegisterExplicitTopicBeatsParent(t *testing.T) {
+	t.Setenv("XFA_DB", filepath.Join(t.TempDir(), "board.db"))
+	t.Cleanup(func() { resetRegisterFlags(t) })
+	out, _ := runRegister(t, "--parent", "web-wombat-25", "--topic", "store")
+	if !strings.HasPrefix(out, "store-") || !randomHandleRe.MatchString(out) {
+		t.Fatalf("handle = %q, want store-<word>-<N>", out)
+	}
+}
+
+// "ignored" has to mean "as if never passed": the hook prose ships a <word>
+// placeholder that fails validation when pasted verbatim, so a rejected
+// explicit --topic must still fall through to the parent's prefix.
+func TestRegisterBadTopicStillInheritsFromParent(t *testing.T) {
+	t.Setenv("XFA_DB", filepath.Join(t.TempDir(), "board.db"))
+	t.Cleanup(func() { resetRegisterFlags(t) })
+	out, errOut := runRegister(t, "--parent", "web-wombat-25", "--topic", "<one-word>")
+	if !strings.HasPrefix(out, "web-") || !randomHandleRe.MatchString(out) {
+		t.Fatalf("handle = %q, want web-<word>-<N>", out)
+	}
+	if !strings.Contains(errOut, "--topic ignored: use one lowercase word (a-z0-9, max 10)") {
+		t.Fatalf("stderr = %q, want the ignored note", errOut)
+	}
+}
+
+// Inheritance is automatic, not something the caller asked for: an unusable
+// parent degrades to a random handle in silence. A note here would blame an
+// agent for a flag it never passed.
+func TestRegisterUnusableParentInheritsNothingQuietly(t *testing.T) {
+	t.Setenv("XFA_DB", filepath.Join(t.TempDir(), "board.db"))
+	t.Cleanup(func() { resetRegisterFlags(t) })
+	for _, parent := range []string{"nodashes", strings.Repeat("a", 11) + "-otter-7", "-otter-7", "human-otter-7"} {
+		out, errOut := runRegister(t, "--parent", parent)
+		if !randomHandleRe.MatchString(out) {
+			t.Errorf("%q: handle = %q, want a random handle", parent, out)
+		}
+		if errOut != "" {
+			t.Errorf("%q: stderr = %q, want silence", parent, errOut)
+		}
+		resetRegisterFlags(t)
+	}
+}

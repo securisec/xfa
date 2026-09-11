@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/securisec/xfa/internal/handle"
 	"github.com/securisec/xfa/internal/store"
@@ -38,6 +39,21 @@ var registerCmd = &cobra.Command{
 			} else {
 				fmt.Fprintln(cmd.ErrOrStderr(), "--topic ignored: use one lowercase word (a-z0-9, max 10)")
 				topic = ""
+			}
+		}
+		if topic == "" && parent != "" {
+			// Subagents reliably pass --parent and reliably forget --topic (the
+			// only thing asking for one is prose the lead has to copy into the
+			// spawn prompt), so inherit the parent's topic slot: --parent
+			// debate-salamander-62 mints debate-<noun>-<N>. Inheriting a
+			// parent's random adjective is intended — it groups lineage and is
+			// indistinguishable from any other random handle. An unusable
+			// parent degrades to random in SILENCE: inheritance is automatic,
+			// so there is no --topic the caller could have gotten wrong. A
+			// rejected explicit --topic lands here too — the note above says
+			// "ignored", which has to mean "as if never passed".
+			if first, _, ok := strings.Cut(parent, "-"); ok {
+				topic, _ = handle.ValidTopic(first)
 			}
 		}
 		s, err := openStore()

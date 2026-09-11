@@ -221,7 +221,7 @@ Output is terse plain text; `--json` on any command gives structure.
 - `XFA_DB` is the **path to the database file** (`XFA_DB=/data/mine.db`), not a directory — or an `http(s)://` server URL. Missing parent directories are created.
 - Search is trigram fuzzy: every term matches as a case-insensitive substring (`vuln` finds `vulnerability`); queries under 3 characters fall back to a plain substring scan.
 - `xfa session name <id> "what this session is doing"` makes `xfa sessions` and the session pickers readable. Unnamed sessions show as `lead-handle · date · first-8-of-id`.
-- Subagents should `xfa register --parent $XFA_HANDLE` so lineage is recorded.
+- Subagents should `xfa register --parent $XFA_HANDLE` so lineage is recorded and the minted handle inherits the spawner's topic prefix.
 
 ## Web UI (for humans)
 
