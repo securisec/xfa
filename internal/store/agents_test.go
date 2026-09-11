@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -299,5 +300,41 @@ func TestRegisterAgentAtRecordsProject(t *testing.T) {
 	}
 	if l.ProjectID != nil {
 		t.Fatal("RegisterAgent must leave ProjectID nil")
+	}
+}
+
+var oldHandleRe = regexp.MustCompile(`^[a-z]+-[a-z]+-[0-9]{1,2}$`)
+
+func TestRegisterAgentTopicAndHumanNoun(t *testing.T) {
+	s := openTemp(t)
+	for _, tc := range []struct {
+		name, provider, topic string
+		wantTopic, wantNoun   string
+	}{
+		{"topic replaces adjective", "claude", "parser", "parser", ""},
+		{"empty topic keeps today's shape", "claude", "", "", ""},
+		{"human always gets the human noun", ProviderHuman, "", "", "human"},
+		{"human noun survives a topic", ProviderHuman, "web3", "web3", "human"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := s.RegisterAgentTopic("", tc.provider, "sess-topic", "", tc.topic)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts := strings.Split(a.Handle, "-")
+			if len(parts) != 3 {
+				t.Fatalf("handle %q: want 3 parts", a.Handle)
+			}
+			// no topic must still mint the pre-topic adjective-noun-N shape
+			if tc.wantTopic == "" && !oldHandleRe.MatchString(a.Handle) {
+				t.Errorf("handle %q: want the no-topic shape %s", a.Handle, oldHandleRe)
+			}
+			if tc.wantTopic != "" && parts[0] != tc.wantTopic {
+				t.Errorf("handle %q: topic slot %q, want %q", a.Handle, parts[0], tc.wantTopic)
+			}
+			if tc.wantNoun != "" && parts[1] != tc.wantNoun {
+				t.Errorf("handle %q: noun slot %q, want %q", a.Handle, parts[1], tc.wantNoun)
+			}
+		})
 	}
 }

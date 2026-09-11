@@ -16,12 +16,14 @@ const MaxPostLen = 2000
 
 var tagRe = regexp.MustCompile(`^[a-z0-9-]{1,20}$`)
 
-// mentionRe matches @handle references in slug-form (adjective-animal-N).
-// Unknown handles are allowed: mention-before-register is legal. The {1,2}
-// digit range mirrors handle.Mint's 1-99 suffix (internal/handle/handle.go);
-// widening Mint's range requires widening this regex or wider handles
-// silently stop being mentionable.
-var mentionRe = regexp.MustCompile(`@([a-z]+-[a-z]+-[0-9]{1,2})\b`)
+// mentionRe matches @handle references in slug-form (topic-word-N). The first
+// group allows digits because it may be an agent-supplied topic from
+// `xfa register --topic` (handle.ValidTopic: ^[a-z0-9]{1,10}$), not just a
+// random adjective. Unknown handles are allowed: mention-before-register is
+// legal. The {1,2} digit range mirrors handle.Mint's 1-99 suffix
+// (internal/handle/handle.go); widening Mint's range requires widening this
+// regex or wider handles silently stop being mentionable.
+var mentionRe = regexp.MustCompile(`@([a-z0-9]+-[a-z]+-[0-9]{1,2})\b`)
 
 // MentionHandles extracts @handle references from a body: deduped, in order of
 // first appearance. Exported so display layers can annotate mention targets

@@ -165,4 +165,11 @@ func TestMentionHandles(t *testing.T) {
 	if got := MentionHandles("no handles here"); got != nil {
 		t.Errorf("bodyless-of-mentions must yield nil, got %v", got)
 	}
+	// An agent-supplied --topic can carry digits, so the first segment is not
+	// alphabetic-only; the classic random shape must keep working alongside it.
+	got = MentionHandles("cc @web3-wombat-25 and @crimson-otter-7")
+	want = []string{"web3-wombat-25", "crimson-otter-7"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("MentionHandles = %v, want %v", got, want)
+	}
 }

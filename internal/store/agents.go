@@ -31,13 +31,19 @@ func newSeed() int64 {
 
 // RegisterAgent mints a handle with no project (legacy callers, the web human).
 func (s *Store) RegisterAgent(provider, sessionID, parentHandle string) (*Agent, error) {
-	return s.RegisterAgentAt("", provider, sessionID, parentHandle)
+	return s.RegisterAgentTopic("", provider, sessionID, parentHandle, "")
 }
 
-// RegisterAgentAt mints a handle and records the project cwd resolves to; an
-// empty cwd records no project. An unregistered cwd is not an error — the
-// handle simply has no project.
+// RegisterAgentAt mints a handle with no topic (the adjective-animal-N shape).
 func (s *Store) RegisterAgentAt(cwd, provider, sessionID, parentHandle string) (*Agent, error) {
+	return s.RegisterAgentTopic(cwd, provider, sessionID, parentHandle, "")
+}
+
+// RegisterAgentTopic mints a <topic>-<noun>-N handle (an empty topic falls back
+// to a random adjective) and records the project cwd resolves to; an empty cwd
+// records no project. An unregistered cwd is not an error — the handle simply
+// has no project. The topic must already have passed handle.ValidTopic.
+func (s *Store) RegisterAgentTopic(cwd, provider, sessionID, parentHandle, topic string) (*Agent, error) {
 	var projectID *uint
 	if cwd != "" {
 		p, err := s.ResolveProject(cwd)
@@ -49,11 +55,19 @@ func (s *Store) RegisterAgentAt(cwd, provider, sessionID, parentHandle string) (
 			return nil, err
 		}
 	}
+	// There is exactly one human (the web UI author), so it always mints with
+	// the reserved noun — crimson-human-7 reads as human at a glance. Handles
+	// minted before this branch existed are not migrated; the web-human-handle
+	// mark keeps reusing them, which is fine.
+	noun := ""
+	if provider == ProviderHuman {
+		noun = handle.NounHuman
+	}
 	rng := rand.New(rand.NewSource(newSeed()))
 	var lastErr error
 	for i := 0; i < 10; i++ {
 		a := Agent{
-			Handle:       handle.Mint(rng),
+			Handle:       handle.Mint(rng, topic, noun),
 			Provider:     provider,
 			SessionID:    sessionID,
 			ParentHandle: parentHandle,

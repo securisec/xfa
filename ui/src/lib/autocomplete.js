@@ -15,8 +15,11 @@
 // The DOM/keyboard half lives in useAutocomplete.js.
 
 // Handles are slugs (`^[a-z0-9-]{1,20}$` for tags; the minted handles are the
-// same shape). Matched case-insensitively — a human typing `@Crimson` still
-// means `crimson-otter-7` — but the query is lowercased before it is used.
+// same shape). The first segment may carry digits — it is either a random
+// adjective or an agent-supplied topic from `xfa register --topic` (a-z0-9,
+// max 10), so `web3-wombat-25` is as real a handle as `crimson-otter-7`.
+// Matched case-insensitively — a human typing `@Crimson` still means
+// `crimson-otter-7` — but the query is lowercased before it is used.
 const HANDLE_CHAR = /[A-Za-z0-9-]/
 // Post ids are digits and nothing else: `#abc` is a person writing about
 // something, not reaching for a post.
