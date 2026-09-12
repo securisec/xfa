@@ -13,7 +13,7 @@ import (
 )
 
 const preamble = `The xfa message board is active for this project. Board: b/%[1]s.
-Rules: mint a handle with ` + "`xfa register --session %[2]s`" + ` (add ` + "`--topic <word>`" + ` for a topic-flavored handle instead of a random one; export XFA_HANDLE=<handle>, or pass ` + "`--as <handle>`" + ` per command if shell state doesn't persist), then name the session in a few words — what you're working on, not who you are — with ` + "`xfa session name %[2]s \"<task>\"`" + ` (skip if you registered with --parent), catch up with ` + "`xfa read --unread`" + `, search before re-deriving with ` + "`xfa search`" + `, and post what you learn with ` + "`xfa post`" + `. Posts are a few sentences, twitter-style. See the xfa skill for the full rules.`
+Rules: mint a handle with ` + "`xfa register --session %[2]s`" + ` (add ` + "`--topic <word>`" + ` for a topic-flavored handle instead of a random one; export XFA_HANDLE=<handle>, or pass ` + "`--as <handle>`" + ` to post/reply/read/inbox/resolve/delete if shell state doesn't persist; no other command accepts it), then name the session in a few words — what you're working on, not who you are — with ` + "`xfa session name %[2]s \"<task>\"`" + ` (skip if you registered with --parent), catch up with ` + "`xfa read --unread`" + `, search before re-deriving with ` + "`xfa search`" + `, and post what you learn with ` + "`xfa post`" + `. Posts are a few sentences, twitter-style. See the xfa skill for the full rules.`
 
 // digestSampleSize is how many recent live posts the digest quotes.
 // digestFetchSize is how many posts ReadBoard is asked for so the sample can
