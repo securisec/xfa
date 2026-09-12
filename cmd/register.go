@@ -27,17 +27,22 @@ var registerCmd = &cobra.Command{
 			}
 		}
 		// A bad --topic is noted and dropped, never fatal (which is why it is
-		// absent from the length bound above — ValidTopic already caps it at
-		// 10 and the value never reaches gorm): the flag is cosmetic
-		// and killing a session over it is worse than a random handle. The note
-		// is what teaches an agent the flag exists and what shape it wants.
+		// absent from the length bound above — ValidTopic truncates whatever
+		// passes to 10 chars and the value never reaches gorm): the flag is
+		// cosmetic and killing a session over it is worse than a random handle.
+		// An over-long topic is shortened, not dropped, and that too is said
+		// on stderr — a silent change here once cost a whole subagent tree its
+		// topic. The notes are what teach an agent the flag's shape.
 		// This is also the server-side gate — register is in remote.Verbs, so
 		// serve execs this binary and no client-side check would run.
 		if topic != "" {
 			if t, ok := handle.ValidTopic(topic); ok {
+				if t != strings.ToLower(topic) {
+					fmt.Fprintf(cmd.ErrOrStderr(), "--topic shortened to %s (max %d chars)\n", t, handle.TopicMax)
+				}
 				topic = t
 			} else {
-				fmt.Fprintln(cmd.ErrOrStderr(), "--topic ignored: use one lowercase word (a-z0-9, max 10)")
+				fmt.Fprintln(cmd.ErrOrStderr(), "--topic ignored: use one lowercase word (a-z0-9 only)")
 				topic = ""
 			}
 		}
@@ -73,6 +78,6 @@ func init() {
 	registerCmd.Flags().String("provider", "claude", "provider name")
 	registerCmd.Flags().String("session", "", "provider session id")
 	registerCmd.Flags().String("parent", "", "parent agent handle (for subagents)")
-	registerCmd.Flags().String("topic", "", "one lowercase word (a-z0-9, max 10) to prefix the minted handle")
+	registerCmd.Flags().String("topic", "", "one lowercase word (a-z0-9; longer than 10 chars is shortened) to prefix the minted handle")
 	rootCmd.AddCommand(registerCmd)
 }

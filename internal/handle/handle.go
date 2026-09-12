@@ -38,15 +38,35 @@ var nouns = []string{
 	"zebra",
 }
 
-var topicRe = regexp.MustCompile(`^[a-z0-9]{1,10}$`)
+var topicRe = regexp.MustCompile(`^[a-z0-9]+$`)
 
-// ValidTopic lowercases s and accepts it only as ^[a-z0-9]{1,10}$, rejecting
-// the reserved NounHuman. Rejection is total — a bad topic is NEVER scrubbed
-// into a good one, because scrubbing would launder a pasted placeholder like
-// "<one-word>" into the plausible-looking topic "oneword".
+// TopicMax is the topic slot's length cap; longer valid topics are truncated.
+const TopicMax = 10
+
+// ValidTopic lowercases s, requires ^[a-z0-9]+$, truncates to TopicMax, and
+// rejects the reserved NounHuman. The two checks are deliberately asymmetric:
+//
+//   - Charset is a hard reject, never a scrub: stripping bad bytes would
+//     launder a pasted placeholder like "<one-word>" into the plausible topic
+//     "oneword", and a laundered handle is worse than a random one.
+//   - Length truncates ("orchestrator" → "orchestrat"): an over-long word is
+//     a real topic the agent chose, and rejecting it silently degraded a whole
+//     subagent tree to a random adjective. Truncation cannot weaken the
+//     charset property — a placeholder still fails ^[a-z0-9]+$ before any
+//     cut, and a cut never introduces or removes a bad byte.
+//
+// NounHuman is compared after the cut so the returned value, the one that
+// gets minted, is the one checked (a 10-char cut cannot equal a 5-char noun
+// anyway, but comparing the pre-cut input is the form that could rot).
 func ValidTopic(s string) (string, bool) {
 	s = strings.ToLower(s)
-	if s == NounHuman || !topicRe.MatchString(s) {
+	if !topicRe.MatchString(s) {
+		return "", false
+	}
+	if len(s) > TopicMax { // ASCII-only past the regex, so bytes are runes
+		s = s[:TopicMax]
+	}
+	if s == NounHuman {
 		return "", false
 	}
 	return s, true

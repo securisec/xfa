@@ -86,15 +86,43 @@ func TestRegisterTopicPrefixesHandle(t *testing.T) {
 func TestRegisterBadTopicFallsBackWithNote(t *testing.T) {
 	t.Setenv("XFA_DB", filepath.Join(t.TempDir(), "board.db"))
 	t.Cleanup(func() { resetRegisterFlags(t) })
-	for _, topic := range []string{"<one-word>", "two words", "HUMAN", strings.Repeat("a", 11)} {
+	for _, topic := range []string{"<one-word>", "two words", "HUMAN", "<orchestrator>"} {
 		out, errOut := runRegister(t, "--topic", topic)
 		if !randomHandleRe.MatchString(out) {
 			t.Errorf("%q: handle = %q, want a random handle", topic, out)
 		}
-		if !strings.Contains(errOut, "--topic ignored: use one lowercase word (a-z0-9, max 10)") {
+		if !strings.Contains(errOut, "--topic ignored: use one lowercase word (a-z0-9 only)") {
 			t.Errorf("%q: stderr = %q, want the ignored note", topic, errOut)
 		}
 		resetRegisterFlags(t)
+	}
+}
+
+// An over-long but otherwise valid --topic is shortened, not dropped — the
+// real incident was `--topic orchestrator` degrading to a random adjective
+// that 24 descendants then inherited. The shortening is said on stderr, never
+// silently, and the note must not be the "ignored" one.
+func TestRegisterLongTopicIsShortenedWithNote(t *testing.T) {
+	t.Setenv("XFA_DB", filepath.Join(t.TempDir(), "board.db"))
+	t.Cleanup(func() { resetRegisterFlags(t) })
+	out, errOut := runRegister(t, "--topic", "orchestrator")
+	if !strings.HasPrefix(out, "orchestrat-") || !randomHandleRe.MatchString(out) {
+		t.Fatalf("handle = %q, want orchestrat-<noun>-<N>", out)
+	}
+	if !strings.Contains(errOut, "--topic shortened to orchestrat") {
+		t.Fatalf("stderr = %q, want the shortened note", errOut)
+	}
+	if strings.Contains(errOut, "ignored") {
+		t.Fatalf("stderr = %q: a shortened topic is not an ignored one", errOut)
+	}
+	resetRegisterFlags(t)
+	// Exactly 10 is unchanged and silent.
+	out, errOut = runRegister(t, "--topic", "0123456789")
+	if !strings.HasPrefix(out, "0123456789-") {
+		t.Fatalf("handle = %q, want 0123456789-<noun>-<N>", out)
+	}
+	if errOut != "" {
+		t.Fatalf("stderr = %q, want silence", errOut)
 	}
 }
 
@@ -148,7 +176,7 @@ func TestRegisterBadTopicStillInheritsFromParent(t *testing.T) {
 	if !strings.HasPrefix(out, "web-") || !randomHandleRe.MatchString(out) {
 		t.Fatalf("handle = %q, want web-<word>-<N>", out)
 	}
-	if !strings.Contains(errOut, "--topic ignored: use one lowercase word (a-z0-9, max 10)") {
+	if !strings.Contains(errOut, "--topic ignored: use one lowercase word (a-z0-9 only)") {
 		t.Fatalf("stderr = %q, want the ignored note", errOut)
 	}
 }

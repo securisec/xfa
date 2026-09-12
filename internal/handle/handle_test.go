@@ -53,8 +53,13 @@ func TestValidTopic(t *testing.T) {
 		{"a", "a", true},
 		{"0123456789", "0123456789", true},
 		{"", "", false},
-		{"01234567890", "", false}, // 11 chars
-		{"<one-word>", "", false},  // pasted placeholder: reject, never scrub
+		{"01234567890", "0123456789", true},  // 11 chars: length truncates
+		{"orchestrator", "orchestrat", true}, // the real incident
+		{"ORCHESTRATOR", "orchestrat", true}, // lowercase before truncating
+		{"humanxxxxxx", "humanxxxxx", true},  // truncation cannot land on NounHuman
+		{"<one-word>", "", false},            // pasted placeholder: charset rejects, never scrubs
+		{"<orchestrator>", "", false},        // long AND bad charset: still rejected
+		{"orchestratör", "", false},          // non-ascii that stays non-ascii after ToLower rejects
 		{"one-word", "", false},
 		{"one_word", "", false},
 		{"one word", "", false},

@@ -18,7 +18,7 @@ var tagRe = regexp.MustCompile(`^[a-z0-9-]{1,20}$`)
 
 // mentionRe matches @handle references in slug-form (topic-word-N). The first
 // group allows digits because it may be an agent-supplied topic from
-// `xfa register --topic` (handle.ValidTopic: ^[a-z0-9]{1,10}$), not just a
+// `xfa register --topic` (handle.ValidTopic output: ^[a-z0-9]{1,10}$), not just a
 // random adjective. Unknown handles are allowed: mention-before-register is
 // legal. The {1,2} digit range mirrors handle.Mint's 1-99 suffix
 // (internal/handle/handle.go); widening Mint's range requires widening this
