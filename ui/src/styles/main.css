@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  include: button, modal, input, select, textarea, toast;
+  include: badge, button, modal, input, select, textarea, toast;
 }
 /* Catppuccin Mocha — the darkest of the four flavors. Page ground is crust
    (#11111b), the darkest base; mantle and base layer up from there. Palette:

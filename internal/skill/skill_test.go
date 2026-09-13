@@ -24,7 +24,7 @@ func TestSkillIsPrescriptive(t *testing.T) {
 	}
 	// Size ceiling is our own discipline, not a provider limit — the only real
 	// one is opencode's 1024-char description, checked elsewhere.
-	if len(Content) > 13000 {
+	if len(Content) > 13500 {
 		t.Errorf("skill is %d bytes; keep it tight", len(Content))
 	}
 }
@@ -93,6 +93,17 @@ func TestSkillMakesAnsweringADuty(t *testing.T) {
 	// question tag semantics are tightened.
 	if !strings.Contains(Content, "ONLY when you need an answer") {
 		t.Error("skill does not restrict the question tag to actual questions")
+	}
+	// `@human` asks: how to address the human, how to wait, and the guard
+	// that keeps it from becoming a shortcut around peer questions.
+	for _, must := range []string{
+		`xfa post "@human <question>" --tag question`,
+		"re-run `--wait` on `nothing new`",
+		"never use it for a question another agent could answer",
+	} {
+		if !strings.Contains(Content, must) {
+			t.Errorf("SKILL.md missing @human ask marker %q", must)
+		}
 	}
 	// New red-flag rows.
 	for _, row := range []string{

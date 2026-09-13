@@ -860,3 +860,95 @@ describe('inline reply', () => {
     expect(S.inline.body).toBe('')
   })
 })
+
+// pollAsks: the @human badge feed. First successful poll seeds the seen-set
+// silently (a reload must not re-notify the backlog); later polls notify only
+// ids not yet seen; a hidden tab still polls asks (refresh stays gated).
+describe('pollAsks', () => {
+  // Singleton store: earlier describes may have run init() (which seeds) or left a toast.
+  beforeEach(() => { const S = useStore(); S.asks = []; S.seenAskIds = null; S.askNotes.clear(); S.error = '' })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function stubAsks(list) {
+    vi.stubGlobal('fetch', vi.fn(async (url) => new Response(JSON.stringify(String(url) === '/api/asks' ? list : []))))
+  }
+  function stubNotification() {
+    const N = vi.fn(function () { this.close = vi.fn() })
+    N.permission = 'granted'
+    vi.stubGlobal('Notification', N)
+    return N
+  }
+
+  it('seeds silently, then notifies only new ids', async () => {
+    const S = useStore()
+    S.boards = [{ id: 1, slug: 'xfa' }]
+    const N = stubNotification()
+    stubAsks([{ id: 5, board_id: 1, author: 'a-b-1', body: '@human `pick` **one**' }])
+    await S.pollAsks()
+    expect(S.asks.length).toBe(1)
+    expect(N).not.toHaveBeenCalled()
+    stubAsks([{ id: 6, board_id: 1, author: 'c-d-2', body: '@human  two\n\n#7' }, { id: 5, board_id: 1, author: 'a-b-1', body: 'x' }])
+    await S.pollAsks()
+    expect(N).toHaveBeenCalledTimes(1)
+    expect(N.mock.calls[0][0]).toBe('@human from c-d-2 · b/xfa')
+    expect(N.mock.calls[0][1]).toMatchObject({ body: '@human two 7', tag: 'xfa-ask-6', requireInteraction: true })
+    await S.pollAsks()                       // same set again: nothing new
+    expect(N).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not notify without permission, and swallows fetch errors', async () => {
+    const S = useStore()
+    S.seenAskIds = new Set()
+    const N = stubNotification(); N.permission = 'denied'
+    stubAsks([{ id: 9, board_id: 1, author: 'a-b-1', body: 'q' }])
+    await S.pollAsks()
+    expect(N).not.toHaveBeenCalled()
+    expect(S.asks.length).toBe(1)
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('down') }))
+    await S.pollAsks()                       // no throw, no toast
+    expect(S.error).toBe('')
+  })
+
+  it('closes the notification once its ask is gone', async () => {
+    const S = useStore()
+    S.boards = [{ id: 1, slug: 'xfa' }]
+    S.seenAskIds = new Set()
+    const N = stubNotification()
+    stubAsks([{ id: 11, board_id: 1, author: 'a-b-1', body: 'q' }])
+    await S.pollAsks()
+    expect(N).toHaveBeenCalledTimes(1)
+    const note = N.mock.instances[0]        // reactive() proxies the stored copy, so compare ids not identity
+    expect(S.askNotes.has(11)).toBe(true)
+    stubAsks([])                              // human replied: the ask cleared
+    await S.pollAsks()
+    expect(note.close).toHaveBeenCalled()
+    expect(S.askNotes.has(11)).toBe(false)
+  })
+
+  it('send re-checks asks after a write', async () => {
+    const S = useStore()
+    vi.spyOn(S, 'refresh').mockResolvedValue(undefined)
+    const asks = vi.spyOn(S, 'pollAsks').mockResolvedValue(undefined)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 1 }))))
+    await S.send('POST', '/api/posts/1/reply', { body: 'x' })
+    expect(asks).toHaveBeenCalled()
+    asks.mockRestore()
+  })
+
+  it('init polls asks on every tick even when the tab is hidden', async () => {
+    const S = useStore()
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([]))))
+    const asks = vi.spyOn(S, 'pollAsks').mockResolvedValue(undefined)
+    const refresh = vi.spyOn(S, 'refresh').mockResolvedValue(undefined)
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true })
+    await S.init()
+    expect(asks).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(5000)
+    expect(asks).toHaveBeenCalledTimes(2)
+    expect(refresh).toHaveBeenCalledTimes(1) // the forced load only; the poll is gated
+    clearInterval(S.timer)
+    vi.useRealTimers()
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true })
+  })
+})

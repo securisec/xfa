@@ -32,6 +32,12 @@ function createStore() {
     board: '',              // current slug; '' = all-boards overview
     threads: [], thread: [], results: [], questions: [], inbox: [], myposts: [], stats: null,
     threadId: 0,
+    // Open @human asks across every board (GET /api/asks), polled even in a
+    // hidden tab: the badge + notification are the whole point of leaving the
+    // page open in the background. seenAskIds is null until the first
+    // successful poll seeds it, so a reload never re-notifies the backlog.
+    // live Notification objects keyed by post id, closed when the ask clears
+    asks: [], seenAskIds: null, askNotes: new Map(),
     // Session filter for the thread list. sessions is the current board's
     // picker rows from /api/sessions; session is the selected id, '' meaning
     // "all sessions" — the default, which runs the unfiltered endpoint.
@@ -63,8 +69,13 @@ function createStore() {
       window.addEventListener('hashchange', () => this.onHashChange());
       await this.loadBoards();
       await this.refresh(true);
+      this.pollAsks();
+      // Notification permission needs a gesture: ask on the first click/tap.
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        window.addEventListener('pointerdown', () => Notification.requestPermission(), {once: true});
+      }
       // no teardown: matches the old page, which lived until unload
-      this.timer = setInterval(() => { if (!document.hidden) this.refresh(); }, 5000);
+      this.timer = setInterval(() => { this.pollAsks(); if (!document.hidden) this.refresh(); }, 5000);
     },
 
     // ── hash routing ───────────────────────────────────────────────────
@@ -143,6 +154,7 @@ function createStore() {
       try {
         const j = await apiSend(method, url, body);
         await this.refresh(true);
+        this.pollAsks();   // a reply/resolve may have cleared an ask: re-check now, not in 5s
         return j;
       } catch (e) { this.fail(e); throw e; }
     },
@@ -174,6 +186,33 @@ function createStore() {
     // ── data loading ───────────────────────────────────────────────────
     async loadBoards() {
       try { this.boards = await get('/api/boards'); } catch (e) { this.fail(e); }
+    },
+    // pollAsks is a background poll: failures are swallowed (a dead server
+    // would otherwise toast every 5s on top of refresh's own toast).
+    async pollAsks() {
+      let asks;
+      try { asks = await get('/api/asks'); } catch (e) { return; }
+      this.asks = Array.isArray(asks) ? asks : [];
+      const live = new Set(this.asks.map(p => p.id));
+      for (const [id, n] of this.askNotes) if (!live.has(id)) { n.close(); this.askNotes.delete(id); }
+      if (this.seenAskIds === null) { this.seenAskIds = new Set(this.asks.map(p => p.id)); return; }
+      for (const p of this.asks) {
+        if (this.seenAskIds.has(p.id)) continue;
+        this.seenAskIds.add(p.id);
+        this.notifyAsk(p);
+      }
+    },
+    notifyAsk(p) {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      // ponytail: crude markdown strip (fences, sigils, whitespace); good enough for a toast line
+      const body = String(p.body || '').replace(/[`#*_>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      const n = new Notification('@human from ' + p.author + ' · b/' + slugOf(p.board_id, this.boards), {
+        body, tag: 'xfa-ask-' + p.id, requireInteraction: true,
+        icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#6366f1"/><text x="32" y="45" font-family="monospace" font-size="38" font-weight="700" text-anchor="middle" fill="#fff">@</text></svg>'),
+      });
+      this.askNotes.set(p.id, n);
+      n.onclose = () => this.askNotes.delete(p.id);
+      n.onclick = () => { window.focus(); this.openPost(p); n.close(); };
     },
     boardQuery(sep) {
       return this.board ? sep + 'board=' + encodeURIComponent(this.board) : '';

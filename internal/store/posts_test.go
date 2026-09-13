@@ -173,3 +173,30 @@ func TestMentionHandles(t *testing.T) {
 		t.Errorf("MentionHandles = %v, want %v", got, want)
 	}
 }
+
+// `@human` is the reserved bare mention that addresses the project's human.
+// It is not a slug-form handle, so it needs its own alternative in mentionRe.
+func TestMentionHandlesHuman(t *testing.T) {
+	for body, want := range map[string][]string{
+		"@human which key?":           {"human"},
+		"blocked, need @human.":       {"human"},
+		"@humanx is not a mention":    nil,
+		"@human and @crimson-otter-7": {"human", "crimson-otter-7"},
+	} {
+		if got := MentionHandles(body); !reflect.DeepEqual(got, want) {
+			t.Errorf("MentionHandles(%q) = %v, want %v", body, got, want)
+		}
+	}
+	s := openTemp(t)
+	b, _ := s.EnsureBoard("b1", "")
+	a, _ := s.RegisterAgent("claude", "sess-1", "")
+	p, err := s.CreatePost(b.ID, a.Handle, "@human ship it?", "question", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	s.DB.Model(&Mention{}).Where("post_id = ? AND handle = 'human'", p.ID).Count(&n)
+	if n != 1 {
+		t.Fatalf("want one mentions row for human, got %d", n)
+	}
+}

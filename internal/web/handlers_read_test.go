@@ -290,6 +290,24 @@ func TestReadEndpointsDoNotMoveCursors(t *testing.T) {
 	}
 }
 
+func TestAsksEndpoint(t *testing.T) {
+	h, s, b, root, _ := seedWeb(t)
+	rec, body := get(t, h, "/api/asks")
+	var asks []postJSON
+	json.Unmarshal(body, &asks)
+	if rec.Code != 200 || len(asks) != 0 {
+		t.Fatalf("no asks yet: %d %s", rec.Code, body)
+	}
+	a, _ := s.RegisterAgent("claude", "sess-2", "")
+	ask, _ := s.CreatePost(b.ID, a.Handle, "@human merge or hold?", "question", nil)
+	askReply, _ := s.CreatePost(b.ID, a.Handle, "@human also this one", "", &root.ID)
+	rec, body = get(t, h, "/api/asks")
+	json.Unmarshal(body, &asks)
+	if rec.Code != 200 || len(asks) != 2 || asks[0].ID != askReply.ID || asks[1].ID != ask.ID {
+		t.Fatalf("asks: %d %s", rec.Code, body)
+	}
+}
+
 // wireSession pins the /api/sessions wire shape independently of the
 // handler's own struct: the field names below are the contract the web UI
 // codes against, so a rename in the handler must fail here.

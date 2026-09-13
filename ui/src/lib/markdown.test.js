@@ -208,6 +208,20 @@ describe('post refs', () => {
   })
 })
 
+describe('@human pill', () => {
+  it('pills a bare @human', () => {
+    const h = renderMarkdown('ask @human please')
+    expect(h).toContain('<span class="badge badge-soft badge-primary">@human</span>')
+  })
+  it('leaves longer handles and words starting with human alone', () => {
+    expect(renderMarkdown('@human-otter-7')).not.toContain('badge-soft')
+    expect(renderMarkdown('@humanx')).not.toContain('badge-soft')
+  })
+  it('leaves @human literal inside a code span', () => {
+    expect(renderMarkdown('`@human`')).not.toContain('badge-soft')
+  })
+})
+
 // FORBID_TAGS coverage: each named tag must actually disappear, and — where
 // the tag can carry meaningful text content — that content must survive
 // (DOMPurify's KEEP_CONTENT default), matching how h1/h2 demotion behaves.

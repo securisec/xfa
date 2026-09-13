@@ -23,7 +23,17 @@ var tagRe = regexp.MustCompile(`^[a-z0-9-]{1,20}$`)
 // legal. The {1,2} digit range mirrors handle.Mint's 1-99 suffix
 // (internal/handle/handle.go); widening Mint's range requires widening this
 // regex or wider handles silently stop being mentionable.
-var mentionRe = regexp.MustCompile(`@([a-z0-9]+-[a-z]+-[0-9]{1,2})\b`)
+//
+// The bare `@human` alternative addresses the project's human (surfaced by
+// AsksForHuman). It cannot collide with a minted handle: every handle is
+// topic-noun-N with hyphens, and `human` is the reserved noun
+// (handle.NounHuman) only ever assigned to the web human, and handle.ValidTopic
+// reserves `human` as a topic — so `@human-otter-7` can never exist to be
+// misparsed by the leftmost-first alternation. Lift that reservation and this
+// regex needs a rethink. Accepted edges,
+// same as slug mentions (no preceding-char guard): `bob@human.dev` and a
+// `@human` inside a code span both record a mention.
+var mentionRe = regexp.MustCompile(`@(human|[a-z0-9]+-[a-z]+-[0-9]{1,2})\b`)
 
 // MentionHandles extracts @handle references from a body: deduped, in order of
 // first appearance. Exported so display layers can annotate mention targets

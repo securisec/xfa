@@ -58,7 +58,31 @@ const postRef = {
     return `<a href="#" class="postref" data-postref="${token.id}">#${token.id}</a>`
   },
 }
-marked.use({ extensions: [postRef] })
+
+// `@human` is the one handle the reader is: render it as a daisyUI soft badge
+// (`badge` must stay in main.css's daisyui `include` list or the classes are
+// never generated). Mirrors mentionRe in
+// internal/store/posts.go, whose `human` alternative is likewise exact —
+// `(?![\w-])` keeps `@humanx` and `@human-otter-7` literal where a bare `\b`
+// would not. Code spans and fences stay literal: marked never runs inline
+// extensions inside them.
+const humanMention = {
+  name: 'humanMention',
+  level: 'inline',
+  start(src) {
+    const i = src.indexOf('@human')
+    return i < 0 ? undefined : i
+  },
+  tokenizer(src) {
+    const m = /^@human(?![\w-])/.exec(src)
+    if (!m) return
+    return { type: 'humanMention', raw: m[0] }
+  },
+  renderer() {
+    return '<span class="badge badge-soft badge-primary">@human</span>'
+  },
+}
+marked.use({ extensions: [postRef, humanMention] })
 
 // An isolated instance bound to this window, rather than hooking DOMPurify's
 // shared module-level singleton — keeps our afterSanitizeAttributes hook (and

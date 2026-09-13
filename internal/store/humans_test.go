@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -110,6 +111,72 @@ func TestUnaddressedHumanCount(t *testing.T) {
 	_, _ = s.CreatePost(b.ID, agent.Handle, "got the self-reply too", "", &selfReply.ID)
 	if n, _ := s.UnaddressedHumanCount(b.ID); n != 0 {
 		t.Fatalf("agent reply must address the self-reply, got %d", n)
+	}
+}
+
+func TestAsksForHuman(t *testing.T) {
+	s, b, human, agent := humanFixture(t)
+	ids := func(t *testing.T, boardID uint) []uint {
+		t.Helper()
+		posts, err := s.AsksForHuman(boardID)
+		if err != nil {
+			t.Fatalf("AsksForHuman: %v", err)
+		}
+		var out []uint
+		for _, p := range posts {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+	// Plain question without @human is a peer question, not an ask.
+	_, _ = s.CreatePost(b.ID, agent.Handle, "peer q?", "question", nil)
+	top, _ := s.CreatePost(b.ID, agent.Handle, "@human which env?", "question", nil)
+	if got := ids(t, b.ID); !reflect.DeepEqual(got, []uint{top.ID}) {
+		t.Fatalf("top-level ask: got %v", got)
+	}
+	// A reply carrying @human is an ask too (any depth).
+	rep, _ := s.CreatePost(b.ID, agent.Handle, "@human ok to drop the table?", "", &top.ID)
+	if got := ids(t, b.ID); !reflect.DeepEqual(got, []uint{rep.ID, top.ID}) {
+		t.Fatalf("reply ask, id DESC: got %v", got)
+	}
+	// A peer (non-human) reply does NOT clear an ask.
+	_, _ = s.CreatePost(b.ID, agent.Handle, "I'd say prod", "", &top.ID)
+	if got := ids(t, b.ID); len(got) != 2 {
+		t.Fatalf("peer reply must not clear: got %v", got)
+	}
+	// The human's direct reply clears it.
+	_, _ = s.CreatePost(b.ID, human.Handle, "staging", "", &top.ID)
+	if got := ids(t, b.ID); !reflect.DeepEqual(got, []uint{rep.ID}) {
+		t.Fatalf("human reply must clear top: got %v", got)
+	}
+	// Resolving clears it (the asker's path for a top-level question).
+	top2, _ := s.CreatePost(b.ID, agent.Handle, "@human second?", "question", nil)
+	if err := s.Resolve(top2.ID, agent.Handle); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, b.ID); !reflect.DeepEqual(got, []uint{rep.ID}) {
+		t.Fatalf("resolve must clear: got %v", got)
+	}
+	// Tombstoned asks are excluded.
+	if err := s.Tombstone(rep.ID, agent.Handle); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(t, b.ID); got != nil {
+		t.Fatalf("tombstoned must be excluded: got %v", got)
+	}
+	// A human typing @human is not a self-ask.
+	_, _ = s.CreatePost(b.ID, human.Handle, "@human note to self", "", nil)
+	if got := ids(t, b.ID); got != nil {
+		t.Fatalf("human-authored must be excluded: got %v", got)
+	}
+	// boardID 0 spans boards.
+	b2, _ := s.EnsureBoard("b2", "")
+	other, _ := s.CreatePost(b2.ID, agent.Handle, "@human cross-board?", "question", nil)
+	if got := ids(t, b.ID); got != nil {
+		t.Fatalf("board filter leaked: got %v", got)
+	}
+	if got := ids(t, 0); !reflect.DeepEqual(got, []uint{other.ID}) {
+		t.Fatalf("boardID 0 must span boards: got %v", got)
 	}
 }
 

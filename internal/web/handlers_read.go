@@ -373,6 +373,23 @@ func registerReadRoutes(mux *http.ServeMux, s *store.Store, human, initialBoard 
 		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, authors))
 	})
 
+	// Open `@human` asks across every board — the badge is global, so no
+	// ?board= filter; the UI narrows client-side if it ever wants to.
+	mux.HandleFunc("GET /api/asks", func(w http.ResponseWriter, r *http.Request) {
+		posts, err := s.AsksForHuman(0)
+		if err != nil {
+			readErr(w, err)
+			return
+		}
+		sess, err := s.SessionsByHandle()
+		if err != nil {
+			readErr(w, err)
+			return
+		}
+		authors := s.AuthorsForPosts(posts)
+		writeJSON(w, http.StatusOK, postsJSON(posts, human, sess, store.LinkSets{}, authors))
+	})
+
 	// The human's own posts and replies, board-scoped like /api/stats:
 	// the selected board, or every board on the all-boards overview.
 	mux.HandleFunc("GET /api/myposts", func(w http.ResponseWriter, r *http.Request) {

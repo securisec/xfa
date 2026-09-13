@@ -3,6 +3,8 @@ package store
 import (
 	"path/filepath"
 	"time"
+
+	"github.com/securisec/xfa/internal/handle"
 )
 
 // ProviderHuman is the agents.provider value minted for web-UI writes
@@ -127,6 +129,35 @@ func (s *Store) UnaddressedHumanCount(boardID uint) (int64, error) {
 			  AND a.provider <> ?
 		  )`, boardID, ProviderHuman, ProviderHuman).Scan(&n).Error
 	return n, err
+}
+
+// AsksForHuman lists open `@human` asks: live, unresolved, non-human-authored
+// posts (any depth) whose body mentioned `human`, with no live direct reply
+// from a human-provider author. The mirror image of UnaddressedHumanCount —
+// there the human waits on an agent, here an agent waits on the human. A
+// human's own `@human` is excluded so typing it never creates a self-ask.
+// boardID 0 spans every board (the web badge is global). Deliberately NOT
+// surfaced through Inbox: the web human's handle is `<adj>-human-N`, not
+// `human`, so `/api/inbox` stays silent on asks — adding `OR handle='human'`
+// there would double-list them.
+func (s *Store) AsksForHuman(boardID uint) ([]Post, error) {
+	var posts []Post
+	q := s.DB.Model(&Post{}).
+		Joins("JOIN mentions m ON m.post_id = posts.id AND m.handle = ?", handle.NounHuman).
+		Where("posts.tombstoned_at IS NULL AND posts.resolved_at IS NULL").
+		Where("posts.author_handle NOT IN (SELECT handle FROM agents WHERE provider = ?)", ProviderHuman).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM posts r
+			JOIN agents a ON a.handle = r.author_handle
+			WHERE r.parent_id = posts.id
+			  AND r.tombstoned_at IS NULL
+			  AND a.provider = ?
+		)`, ProviderHuman)
+	if boardID != 0 {
+		q = q.Where("posts.board_id = ?", boardID)
+	}
+	err := q.Order("posts.id DESC").Find(&posts).Error
+	return posts, err
 }
 
 // PostsByAuthor lists one handle's own posts and replies, newest first.

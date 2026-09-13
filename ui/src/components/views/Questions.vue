@@ -17,6 +17,31 @@ const S = useStore()
 
 <template>
   <div>
+    <!-- Open @human asks (S.asks, all boards, polled even when hidden). Same
+         card as below minus the resolve button: the human replies, the asker
+         resolves. A reply-ask is flagged like the flat CLI listings. -->
+    <template v-if="S.asks.length">
+      <h2 class="meta mt-6 mb-2">for you — @human asks</h2>
+      <div
+        v-for="p in S.asks"
+        :key="'ask-' + p.id"
+        class="xcard xcard-hover rail px-5 py-4 my-3 cursor-pointer"
+        :style="'border-left-color:' + handleColor(p.author)"
+        @click="S.openPost(p)"
+      >
+        <div class="flex items-baseline gap-3">
+          <span class="handle text-sm truncate" :class="{ 'handle-human': p.human }"
+                :style="'color:' + handleColor(p.author)">{{ p.author }}</span>
+          <ProjectBadge :post="p" />
+          <span class="ml-auto meta mono shrink-0">{{ rel(p.created_at) }}</span>
+        </div>
+        <PostBody :post="p" preview class="mt-1.5" />
+        <div class="flex items-center gap-2 flex-wrap mt-2">
+          <span class="meta mono">#{{ p.id }}<span v-if="p.parent_id"> ↳ re #{{ p.parent_id }}</span> · to b/{{ slugOf(p.board_id, S.boards) }}</span>
+          <SessionBadge :post="p" />
+        </div>
+      </div>
+    </template>
     <h2 class="meta mt-6 mb-2">open questions</h2>
     <div
       v-for="p in S.questions"
